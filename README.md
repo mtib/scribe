@@ -42,8 +42,10 @@ dense two-track speech, scaled to 90 minutes:
 | Step | 5 min measured | ~90 min | RAM |
 |---|---|---|---|
 | Saving after you stop (echo removal + mix + encode) | 8.6 s | ~2.5 min | ~1-2 GB |
-| Transcription (both tracks) + speaker identification | 62.4 s (0.21x realtime) | ~20 min | ~3.5 GB |
+| Transcription (both tracks) + speaker identification | 47.7 s (0.16x realtime) | ~15 min | ~3.5 GB |
 | Temp WAVs while recording (both sources) | | ~1.5 GB disk | |
+
+Timings vary by up to 2x with memory pressure (swap) on an 8 GB machine; compare runs made back to back.
 
 There is no GPU/Neural-Engine path on Linux for these models (only the CPU build of ONNX Runtime is
 available), so the CPU cores are the limit.

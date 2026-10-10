@@ -15,6 +15,18 @@ EMB_URL = f"{BASE}/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en
 SEG_FILE = "pyannote-segmentation-3-0.onnx"
 EMB_FILE = "3dspeaker-campplus-zh-en-16k.onnx"
 THRESHOLD = 0.7
+# Segmentation slides a 10 s window and one speaker embedding is computed per window and
+# speaker, which is most of the diarization time. sherpa's default step (10% = 1 s) is kept for
+# short recordings (a coarser step lost a speaker on a 25 s clip); long recordings have plenty of
+# windows per speaker, so the step grows to 25% (5 min benchmark: 44 s -> ~22 s, 99% agreement).
+SHIFT_SHORT, SHIFT_LONG = 0.1, 0.25
+SHIFT_RAMP = (120.0, 300.0)  # seconds over which the step grows
+
+
+def shift_ratio(seconds):
+    a, b = SHIFT_RAMP
+    f = min(1.0, max(0.0, (seconds - a) / (b - a)))
+    return SHIFT_SHORT + f * (SHIFT_LONG - SHIFT_SHORT)
 
 
 def models_present():
@@ -52,7 +64,9 @@ def diarize(audio, num_speakers=None, progress=None, threads=4):
     m = str(paths.SCRIBE_MODELS_DIR) + "/"
     cfg = so.OfflineSpeakerDiarizationConfig(
         segmentation=so.OfflineSpeakerSegmentationModelConfig(
-            pyannote=so.OfflineSpeakerSegmentationPyannoteModelConfig(model=m + SEG_FILE), num_threads=threads),
+            pyannote=so.OfflineSpeakerSegmentationPyannoteModelConfig(
+                model=m + SEG_FILE, window_shift_ratio=shift_ratio(len(audio) / 16000)),
+            num_threads=threads),
         embedding=so.SpeakerEmbeddingExtractorConfig(model=m + EMB_FILE, num_threads=threads),
         clustering=so.FastClusteringConfig(num_clusters=num_speakers or -1, threshold=THRESHOLD),
     )

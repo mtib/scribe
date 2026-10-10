@@ -1,6 +1,6 @@
 import numpy as np
 
-from scribe import audio, export, library, merge
+from scribe import audio, diarize, export, library, merge
 from scribe.merge import Turn
 
 
@@ -115,3 +115,10 @@ def test_quiet_speech_is_not_mistaken_for_silence():
     a = (np.random.default_rng(1).standard_normal(5 * sr) * 0.004).astype(np.float32)  # about -48 dB
     ch = audio.speech_chunks(a)
     assert ch and ch[0][0] == 0 and ch[-1][1] == len(a)
+
+
+def test_diarization_step_is_fine_for_short_and_coarse_for_long_recordings():
+    assert diarize.shift_ratio(25) == diarize.SHIFT_SHORT
+    assert diarize.shift_ratio(120) == diarize.SHIFT_SHORT
+    assert diarize.SHIFT_SHORT < diarize.shift_ratio(200) < diarize.SHIFT_LONG
+    assert diarize.shift_ratio(5400) == diarize.SHIFT_LONG
