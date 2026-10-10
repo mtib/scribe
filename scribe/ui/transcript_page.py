@@ -4,7 +4,7 @@ from gi.repository import Adw, GLib, Gtk
 
 from .. import export, library
 from .player import Player
-from .util import run_bg
+from .util import make_header, run_bg
 
 
 class TranscriptPage(Adw.NavigationPage):
@@ -17,7 +17,7 @@ class TranscriptPage(Adw.NavigationPage):
         self.last_status = None
         self.alive = True
 
-        header = Adw.HeaderBar()
+        header = make_header(win)
         self.name = Gtk.Entry(text=rec.title, placeholder_text=rec.display_title, width_chars=34, max_width_chars=48, xalign=0.5)
         self.name.connect("activate", self._rename)
         fc = Gtk.EventControllerFocus()

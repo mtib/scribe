@@ -54,7 +54,11 @@ def build_css(c):
 STATIC_CSS = """
 * { font-family: monospace; border-radius: 0; box-shadow: none; text-shadow: none; }
 window, .background { background: @window_bg_color; }
-headerbar { background: @window_bg_color; border-bottom: 1px solid @line; min-height: 40px; }
+headerbar { background: @window_bg_color; border-bottom: 1px solid @line; min-height: 44px; padding: 0 8px; }
+headerbar box { border-spacing: 8px; }
+.topbar { padding: 8px; border-spacing: 8px; border-bottom: 1px solid @line; background: @window_bg_color; }
+headerbar button.image-button, button.square { padding: 0; min-width: 28px; }
+button.square label { font-size: 18px; }
 button, entry, searchentry, dropdown > button { background: transparent; border: 1px solid @ctl_border; color: @window_fg_color; padding: 0 12px; min-height: 28px; outline: none; }
 entry, searchentry { padding: 0 8px; }
 button:hover, entry:hover, searchentry:hover, dropdown > button:hover { background: @ctl_hover_bg; border-color: @ctl_border_hover; }
@@ -65,10 +69,6 @@ button.destructive-action { color: @destructive_bg_color; border-color: @destruc
 button.flat { border-color: transparent; }
 button.flat:hover { border-color: @ctl_border_hover; }
 button:checked, togglebutton:checked { background: @card_bg_color; border-color: @accent_color; color: @accent_color; }
-windowcontrols > button { background: none; border: none; padding: 0; margin: 0 0 0 6px; min-width: 28px; min-height: 28px; }
-windowcontrols > button > image { background: none; border: 1px solid @ctl_border; padding: 0; margin: 0; min-width: 28px; min-height: 28px; color: @window_fg_color; }
-windowcontrols > button:hover > image { background: @ctl_hover_bg; border-color: @ctl_border_hover; }
-windowcontrols > button.close:hover > image { color: @destructive_bg_color; border-color: @destructive_bg_color; }
 searchentry > text, entry > text { min-height: 0; padding: 0; }
 list, listview { background: transparent; }
 row { border-bottom: 1px solid @line; padding: 0; }

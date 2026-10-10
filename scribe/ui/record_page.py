@@ -4,7 +4,7 @@ from gi.repository import Adw, GLib, Gtk
 
 from .. import encoder, library, paths
 from ..recorder import Recorder
-from .util import run_bg
+from .util import make_header, run_bg
 
 SOURCES = {"mic": ["mic"], "system": ["system"], "both": ["mic", "system"]}
 
@@ -16,7 +16,7 @@ class RecordPage(Adw.NavigationPage):
         self.rec = None
         self.timer_id = None
 
-        header = Adw.HeaderBar()
+        header = make_header(win)
         self.name = Gtk.Entry(placeholder_text="name this recording (optional)", hexpand=True, max_width_chars=48)
 
         self.source_btns = {}

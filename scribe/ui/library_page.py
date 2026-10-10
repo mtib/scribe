@@ -3,7 +3,7 @@ gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk, Pango
 
 from .. import asr, library
-from .util import fmt_dur
+from .util import fmt_dur, make_topbar
 
 
 class LibraryPage(Adw.NavigationPage):
@@ -12,14 +12,11 @@ class LibraryPage(Adw.NavigationPage):
         self.win = win
         self.query = ""
 
-        header = Adw.HeaderBar()
-        header.set_show_back_button(False)
-        self.search = Gtk.SearchEntry(placeholder_text="search recordings and transcripts", hexpand=True, max_width_chars=60)
+        self.search = Gtk.SearchEntry(placeholder_text="search recordings and transcripts", hexpand=True)
         self.search.connect("search-changed", self._on_search)
-        header.set_title_widget(self.search)
         new = Gtk.Button(label="new recording", css_classes=["cta"])
         new.connect("clicked", lambda *_: win.open_record())
-        header.pack_end(new)
+        header = make_topbar(win, self.search, new)
 
         self.banner = Gtk.Label(wrap=True, xalign=0, css_classes=["banner"], margin_start=16, margin_end=16, margin_top=8)
         self.banner.set_visible(False)
