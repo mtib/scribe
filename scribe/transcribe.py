@@ -30,6 +30,7 @@ def run(rec, progress=None, num_speakers=None):
     rec.update(status="transcribing", error=None)
     try:
         words, mix = _words(rec, p)
+        asr.unload_model()  # each job is its own worker process, so nothing reuses it
         turns, notice = [], None
         try:
             if not diarize.models_present():

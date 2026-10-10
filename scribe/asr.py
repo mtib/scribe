@@ -44,6 +44,21 @@ def load_model():
         return _model
 
 
+def unload_model():
+    """Drop the model (~1 GB resident) so later steps of a long job don't share RAM with it."""
+    global _model
+    with _lock:
+        _model = None
+    import ctypes
+    import gc
+
+    gc.collect()
+    try:  # hand freed heap pages back to the OS; glibc keeps them otherwise
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
+
+
 # Parakeet (int8) sometimes returns nothing for a chunk that clearly contains speech, and
 # which chunks fail depends chaotically on their exact length. Silence padding of a
 # different length makes it decode, so empty-looking chunks are retried with other pads.
