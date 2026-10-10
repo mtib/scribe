@@ -1,0 +1,15 @@
+[project]
+name = "scribe"
+version = "0.1.0"
+description = "Record, transcribe and diarize audio locally (Omarchy style)"
+requires-python = ">=3.12"
+dependencies = ["onnx-asr", "onnxruntime", "sherpa-onnx", "numpy", "soundfile"]
+
+[project.scripts]
+scribe = "scribe.ui.app:main"
+
+[tool.setuptools]
+packages = ["scribe", "scribe.ui"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
