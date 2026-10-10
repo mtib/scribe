@@ -92,3 +92,12 @@ def test_duck_mic_mutes_only_while_system_is_active():
     assert np.allclose(out[:SR * 4], mic[:SR * 4])  # untouched before
     assert np.allclose(out[SR * 12:], mic[SR * 12:])  # untouched after the hang time
     assert np.abs(np.diff(out / (mic + 1e-9)))[SR * 4:SR * 6].max() < 0.5  # smooth ramp, no click
+
+
+def test_residual_suppressor_segments_match_a_single_pass():
+    ref, echo, near = _scene(seconds=30, seed=9)
+    lin = aec.cancel_echo(echo + near, ref, SR, residual=False)
+    one = aec.suppress_residual(lin, ref, SR, seg_s=1000)  # one segment
+    many = aec.suppress_residual(lin, ref, SR, seg_s=7, ctx_s=1)  # forced chunking
+    assert len(many) == len(one)
+    assert _db(many - one) < _db(one) - 15  # same result up to edge effects (>15 dB below the signal)

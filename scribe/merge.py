@@ -1,5 +1,8 @@
 """Turn ASR tokens into words and align words with diarization turns."""
+import bisect
 from dataclasses import dataclass
+
+import numpy as np
 
 TOKEN_STEP = 0.16  # Parakeet TDT frame step (s); used to estimate word ends
 SEGMENT_GAP = 1.2  # silence (s) that splits a same-speaker segment
@@ -34,18 +37,30 @@ def _overlap(a0, a1, b0, b1):
     return max(0.0, min(a1, b1) - max(a0, b0))
 
 
-def assign_speakers(words, turns):
-    """Give each word the speaker with the most overlap, else the nearest turn."""
-    for w in words:
-        best, best_ov = None, 0.0
-        for t in turns:
-            ov = _overlap(w["s"], w["e"], t.start, t.end)
-            if ov > best_ov:
-                best, best_ov = t.speaker, ov
-        if best is None and turns:
-            mid = (w["s"] + w["e"]) / 2
-            best = min(turns, key=lambda t: min(abs(mid - t.start), abs(mid - t.end))).speaker
-        w["spk"] = best or "S0"
+def assign_speakers(words, turns, chunk=2000):
+    """Give each word the speaker with the most overlap, else the nearest turn (vectorised)."""
+    if not words:
+        return words
+    if not turns:
+        for w in words:
+            w["spk"] = "S0"
+        return words
+    ts = np.array([t.start for t in turns])
+    te = np.array([t.end for t in turns])
+    sp = [t.speaker for t in turns]
+    for i in range(0, len(words), chunk):
+        part = words[i:i + chunk]
+        ws = np.array([w["s"] for w in part])[:, None]
+        we = np.array([w["e"] for w in part])[:, None]
+        ov = np.clip(np.minimum(we, te[None, :]) - np.maximum(ws, ts[None, :]), 0.0, None)
+        best = ov.argmax(axis=1)
+        none = ov[np.arange(len(part)), best] <= 0
+        if none.any():
+            mid = (ws + we) / 2
+            dist = np.minimum(np.abs(mid - ts[None, :]), np.abs(mid - te[None, :]))
+            best = np.where(none, dist.argmin(axis=1), best)
+        for w, j in zip(part, best):
+            w["spk"] = sp[int(j)]
     return words
 
 
@@ -68,18 +83,34 @@ def _norm(text):
 
 def drop_bleed_duplicates(mic_words, sys_words, tol=0.45):
     """Remove mic words that repeat a system word at the same moment (speaker bleed)."""
+    sys_sorted = sorted(sys_words, key=lambda o: o["s"] + o["e"])
+    mids = [(o["s"] + o["e"]) / 2 for o in sys_sorted]
     keep = []
     for w in mic_words:
         mid = (w["s"] + w["e"]) / 2
-        dup = any(abs((o["s"] + o["e"]) / 2 - mid) <= tol and _norm(o["t"]) == _norm(w["t"]) for o in sys_words)
-        if not dup:
+        i, j = bisect.bisect_left(mids, mid - tol), bisect.bisect_right(mids, mid + tol)
+        if not any(_norm(sys_sorted[x]["t"]) == _norm(w["t"]) for x in range(i, j)):
             keep.append(w)
     return keep
 
 
-def speaker_names(turns):
-    """Anonymous display names in order of first appearance: Speaker 1, Speaker 2, ..."""
+MIN_TALK = 1.5  # seconds: a "speaker" with less total talk time than this is a clustering artefact
+
+
+def drop_tiny_speakers(turns, min_talk=MIN_TALK):
+    """Remove turns of speakers who barely talk (spurious clusters); keeps everything if only one remains."""
+    talk = {}
+    for t in turns:
+        talk[t.speaker] = talk.get(t.speaker, 0.0) + (t.end - t.start)
+    real = {s for s, v in talk.items() if v >= min_talk}
+    if not real or len(real) == len(talk):
+        return turns
+    return [t for t in turns if t.speaker in real]
+
+
+def speaker_names(words):
+    """Anonymous names for the speakers who actually have words, in order of first appearance."""
     names = {}
-    for t in sorted(turns, key=lambda t: t.start):
-        names.setdefault(t.speaker, f"Speaker {len(names) + 1}")
+    for w in sorted(words, key=lambda w: w["s"]):
+        names.setdefault(w["spk"], f"Speaker {len(names) + 1}")
     return names

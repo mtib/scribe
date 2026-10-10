@@ -48,6 +48,7 @@ class Recording:
         tmp = self.json_path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(self.meta, ensure_ascii=False))
         os.replace(tmp, self.json_path)
+        _cache.pop(self.json_path, None)
 
     def update(self, **kw):
         self.meta.update(kw)
@@ -69,20 +70,38 @@ def create(rec_id, sources, duration, title="", directory=None):
     return rec
 
 
+_cache = {}  # json path -> (mtime_ns, size, Recording): the UI polls often, transcripts can be large
+
+
+def _load_path(jp, d):
+    try:
+        st = jp.stat()
+        hit = _cache.get(jp)
+        if hit and hit[0] == st.st_mtime_ns and hit[1] == st.st_size:
+            return hit[2]
+        rec = Recording(jp.stem, d, json.loads(jp.read_text()))
+    except (OSError, json.JSONDecodeError):
+        return None
+    _cache[jp] = (st.st_mtime_ns, st.st_size, rec)
+    return rec
+
+
+def load(directory, rec_id):
+    """One recording by id, or None."""
+    d = Path(directory)
+    return _load_path(d / f"{rec_id}.json", d)
+
+
 def load_all(directory=None):
     d = Path(directory or paths.RECORDINGS_DIR)
     if not d.is_dir():
         return []
-    out = []
-    for jp in d.glob("*.json"):
-        try:
-            out.append(Recording(jp.stem, d, json.loads(jp.read_text())))
-        except (OSError, json.JSONDecodeError):
-            continue
+    out = [r for r in (_load_path(jp, d) for jp in d.glob("*.json")) if r]
     out.sort(key=lambda r: r.id, reverse=True)
     return out
 
 
 def delete(rec):
+    _cache.pop(rec.json_path, None)
     for p in (rec.audio, rec.tracks, rec.json_path):
         p.unlink(missing_ok=True)

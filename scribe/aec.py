@@ -144,40 +144,93 @@ def _istft(S, win, hop, length):
     return out[n_fft - hop:n_fft - hop + length]
 
 
-def suppress_residual(e, ref, sr, n_fft=512, hop=128, over=3.0, floor_db=-30.0, pct=60):
+def _tail_max(Rp, k):
+    """Strongest reference power over the last k frames (echo has a tail), in place of a k-fold stack."""
+    tail = Rp.copy()
+    for d in range(1, k):
+        np.maximum(tail[d:], Rp[:-d], out=tail[d:])
+    return tail
+
+
+def _segment(e, ref, lo, hi, n_fft, hop, k):
+    """STFTs and tail power for samples [lo, hi). Frame t is centred on sample lo + t*hop - (n_fft-hop) + n_fft/2."""
+    E, win = _stft(e[lo:hi], n_fft, hop)
+    R, _ = _stft(ref[lo:hi], n_fft, hop)
+    Rp = np.abs(R) ** 2
+    return E, win, np.abs(E) ** 2, Rp, _tail_max(Rp, k)
+
+
+def suppress_residual(e, ref, sr, n_fft=512, hop=128, over=3.0, floor_db=-30.0, pct=60,
+                      seg_s=60.0, ctx_s=1.0, max_rows_per_seg=4000):
     """Attenuate what is left of the echo after the linear stage.
 
-    ref must already be delay-aligned with e. While the reference is active, the lowest
-    typical ratio of residual power to reference power per frequency (60th percentile: mostly
+    ref must already be delay-aligned with e. While the reference is active, the typical
+    ratio of residual power to reference power per frequency (60th percentile: mostly
     frames with no one talking near the mic) is the residual echo coupling. Time-frequency
     bins whose power is not much above that expected echo get a Wiener-style gain below 1;
-    bins with real near-end speech are far above it and pass through untouched."""
+    bins with real near-end speech are far above it and pass through untouched.
+
+    Works in `seg_s` segments (with `ctx_s` of context each side) so memory stays bounded
+    for multi-hour recordings: pass 1 measures typical reference power, pass 2 learns the
+    coupling from a bounded sample of frames, pass 3 applies the gain segment by segment."""
     e = np.asarray(e, np.float32)
     ref = np.asarray(ref, np.float32)[:len(e)]
-    E, win = _stft(e, n_fft, hop)
-    R, _ = _stft(ref, n_fft, hop)
-    Ep, Rp = np.abs(E) ** 2, np.abs(R) ** 2
-    # echo has a tail: use the strongest reference power over the last ~0.1 s
+    n = len(e)
+    seg, ctx = int(seg_s * sr), int(ctx_s * sr)
     k = max(1, int(0.1 * sr / hop))
-    tail = np.stack([np.roll(Rp, d, axis=0) for d in range(k)], axis=0).max(axis=0)
-    frame_pow = Rp.sum(axis=1)
-    active = frame_pow > 0.02 * frame_pow[frame_pow > 0].mean() if np.any(frame_pow > 0) else frame_pow > 1
-    if active.sum() < 10:
+    starts = list(range(0, n, seg))
+    span = lambda a: (max(0, a - ctx), min(n, a + seg + ctx))
+
+    def core_frames(a, lo, nframes):
+        centre = lo + np.arange(nframes) * hop - (n_fft - hop) + n_fft // 2
+        return (centre >= a) & (centre < a + seg)
+
+    tot, cnt = 0.0, 0
+    for a in starts:
+        lo, hi = span(a)
+        R, _ = _stft(ref[lo:hi], n_fft, hop)
+        fp = (np.abs(R) ** 2).sum(axis=1)[core_frames(a, lo, len(R))]
+        pos = fp > 0
+        tot, cnt = tot + float(fp[pos].sum()), cnt + int(pos.sum())
+    if cnt < 10:
         return e
-    ratio = Ep[active] / (tail[active] + 1e-9)
-    rho = np.percentile(ratio, pct, axis=0)
+    thresh = 0.02 * tot / cnt
+
+    rng = np.random.default_rng(0)
+    rows = []
+    for a in starts:
+        lo, hi = span(a)
+        _, _, Ep, Rp, tail = _segment(e, ref, lo, hi, n_fft, hop, k)
+        use = (Rp.sum(axis=1) > thresh) & core_frames(a, lo, len(Ep))
+        if use.any():
+            r = Ep[use] / (tail[use] + 1e-9)
+            if len(r) > max_rows_per_seg:
+                r = r[rng.choice(len(r), max_rows_per_seg, replace=False)]
+            rows.append(r)
+    if not rows or sum(len(r) for r in rows) < 10:
+        return e
+    rho = np.percentile(np.concatenate(rows), pct, axis=0)
     rho = np.convolve(rho, np.ones(5) / 5, mode="same")  # smooth over frequency
-    S = over * rho[None, :] * tail
+
     floor = 10 ** (floor_db / 20)
-    gain = np.sqrt(np.clip(1.0 - S / (Ep + 1e-12), floor ** 2, 1.0))
-    gain[~active] = 1.0
-    sm = np.empty_like(gain)  # fast attack (towards less gain), slow release: no pumping
-    prev = np.ones(gain.shape[1], np.float32)
-    for i in range(len(gain)):
-        prev = np.minimum(gain[i], prev + 0.25 * (gain[i] - prev)) if gain[i].mean() < prev.mean() else prev + 0.35 * (gain[i] - prev)
-        sm[i] = prev
-    sm = np.apply_along_axis(lambda g: np.convolve(g, np.ones(3) / 3, mode="same"), 1, sm)
-    return _istft(E * sm, win, hop, len(e))
+    out = np.empty_like(e)
+    for a in starts:
+        lo, hi = span(a)
+        E, win, Ep, Rp, tail = _segment(e, ref, lo, hi, n_fft, hop, k)
+        active = Rp.sum(axis=1) > thresh
+        gain = np.sqrt(np.clip(1.0 - over * rho[None, :] * tail / (Ep + 1e-12), floor ** 2, 1.0))
+        gain[~active] = 1.0
+        prev = np.ones(gain.shape[1], np.float32)
+        for i in range(len(gain)):  # fast attack, slow release: no pumping (context frames warm this up)
+            g = gain[i]
+            prev = np.minimum(g, prev + 0.25 * (g - prev)) if g.mean() < prev.mean() else prev + 0.35 * (g - prev)
+            gain[i] = prev
+        padded = np.pad(gain, ((0, 0), (1, 1)), mode="edge")
+        gain = (padded[:, :-2] + padded[:, 1:-1] + padded[:, 2:]) / 3  # smooth over frequency
+        y = _istft(E * gain, win, hop, hi - lo)
+        end = min(a + seg, n)
+        out[a:end] = y[a - lo:end - lo]
+    return out
 
 
 def duck_mic(mic, system, sr, depth_db=-30.0, hang=0.35, lead=0.05, ramp=0.06):

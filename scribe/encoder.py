@@ -16,7 +16,7 @@ def _run(args):
         raise RuntimeError(f"ffmpeg failed: {r.stderr.strip()}")
 
 
-def encode(mic, system, out_opus, write_tracks=True):
+def encode(mic, system, out_opus):
     """Encode available sources. Returns the tracks sidecar path or None."""
     out_opus = Path(out_opus)
     srcs = [p for p in (mic, system) if p]
@@ -38,8 +38,6 @@ def encode(mic, system, out_opus, write_tracks=True):
               "[1:a]aformat=channel_layouts=mono,aresample=48000[s];"
               "[m][s]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95[o]",
               "-map", "[o]", *OPUS, str(out_opus)])
-    if not write_tracks:
-        return None
     tracks = out_opus.with_suffix(".tracks.opus")
     _run(["-i", str(mic), "-i", str(system),
           "-filter_complex",
@@ -49,17 +47,3 @@ def encode(mic, system, out_opus, write_tracks=True):
           "-map", "[o]", "-c:a", "libopus", "-b:a", "48k", str(tracks)])
     return tracks
 
-
-def remix(rec):
-    """Re-render rec's saved mix from its raw tracks sidecar (e.g. to apply echo
-    cancellation to a recording made before it existed). The tracks stay untouched."""
-    if not rec.tracks.exists():
-        raise ValueError("this recording has no separate tracks to remix")
-    with tempfile.TemporaryDirectory() as tmp:
-        wavs = {}
-        for ch, name in ((0, "mic"), (1, "system")):
-            wavs[name] = Path(tmp) / f"{name}.wav"
-            _run(["-i", str(rec.tracks), "-af", f"pan=mono|c0=c{ch}", "-ar", "48000", str(wavs[name])])
-        new = Path(tmp) / "mix.opus"
-        encode(wavs["mic"], wavs["system"], new, write_tracks=False)
-        new.replace(rec.audio)

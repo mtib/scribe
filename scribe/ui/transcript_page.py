@@ -1,10 +1,15 @@
+import bisect
+
 import gi
 gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
-from .. import encoder, export, library
+from .. import export, library
 from .player import Player
 from .util import GAP, back_button, make_topbar, run_bg
+
+
+BATCH = 40  # transcript rows built per idle callback
 
 
 class TranscriptPage(Adw.NavigationPage):
@@ -14,6 +19,9 @@ class TranscriptPage(Adw.NavigationPage):
         self.player = Player(rec.audio)
         self.ready = False
         self.rows = []
+        self._starts = []
+        self._cur = None
+        self._gen = 0
         self.last_status = None
         self.alive = True
 
@@ -57,11 +65,6 @@ class TranscriptPage(Adw.NavigationPage):
         foot.append(Gtk.Label(label="speakers", css_classes=["dim"]))
         foot.append(self.count)
         foot.append(redo)
-        # recordings with separate tracks can have their saved mix re-rendered with echo removed
-        self.remix_btn = Gtk.Button(label="remove echo from audio", visible=rec.tracks.exists())
-        self.remix_btn.connect("clicked", lambda *_: self._remix())
-        foot.append(self.remix_btn)
-
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         for w in (bar, self.status, self.progress, self.retry, scroller, foot):
             box.append(w)
@@ -89,7 +92,7 @@ class TranscriptPage(Adw.NavigationPage):
         self.last_status = None
 
     def _reload(self):
-        fresh = {r.id: r for r in library.load_all()}.get(self.rec.id)
+        fresh = library.load(self.rec.dir, self.rec.id)
         if fresh:
             self.rec = fresh
         job = self.win.jobs.progress(self.rec.id)
@@ -113,23 +116,53 @@ class TranscriptPage(Adw.NavigationPage):
             self._render_segments()
 
     def _render_segments(self):
-        while (r := self.list.get_row_at_index(0)) is not None:
-            self.list.remove(r)
+        """Build the rows in small batches between UI events: a 90-minute transcript has
+        thousands of segments and creating them all at once freezes the window."""
+        self._gen += 1
+        gen = self._gen
+        self.list.remove_all()
         self.rows = []
+        self._cur = None
         meta = self.rec.meta
-        for seg in meta.get("segments", []):
-            ts = Gtk.Button(label=export.short_ts(seg["s"]), css_classes=["flat", "ts"], valign=Gtk.Align.START)
-            ts.connect("clicked", lambda _b, t=seg["s"]: self._seek(t))
-            spk = Gtk.Button(label=export.name_of(meta, seg["spk"]), css_classes=["flat", "speaker"], valign=Gtk.Align.START, halign=Gtk.Align.START, width_request=110)
-            spk.get_child().set_xalign(0)
-            spk.connect("clicked", lambda _b, s=seg["spk"]: self._rename_speaker(s))
-            txt = Gtk.Label(label=seg["text"], wrap=True, xalign=0, hexpand=True, selectable=True, margin_top=6, margin_bottom=6)
-            line = Gtk.Box(spacing=GAP, margin_start=8, margin_end=16, css_classes=["seg"])
-            for w in (ts, spk, txt):
-                line.append(w)
-            row = Gtk.ListBoxRow(child=line, activatable=False)
-            self.list.append(row)
-            self.rows.append((seg, line))
+        segs = meta.get("segments", [])
+        self._starts = [seg["s"] for seg in segs]
+
+        def batch(i):
+            if gen != self._gen or not self.alive:
+                return False
+            for seg in segs[i:i + BATCH]:
+                self._add_row(meta, seg)
+            if i + BATCH < len(segs):
+                GLib.idle_add(batch, i + BATCH, priority=GLib.PRIORITY_DEFAULT_IDLE)
+            return False
+
+        batch(0)
+
+    def _add_row(self, meta, seg):
+        ts = Gtk.Button(label=export.short_ts(seg["s"]), css_classes=["flat", "ts"], valign=Gtk.Align.START)
+        ts.connect("clicked", lambda _b, t=seg["s"]: self._seek(t))
+        spk = Gtk.Button(label=export.name_of(meta, seg["spk"]), css_classes=["flat", "speaker"], valign=Gtk.Align.START, halign=Gtk.Align.START, width_request=110)
+        spk.get_child().set_xalign(0)
+        spk.connect("clicked", lambda _b, s=seg["spk"]: self._rename_speaker(s))
+        txt = Gtk.Label(label=seg["text"], wrap=True, xalign=0, hexpand=True, selectable=True, margin_top=6, margin_bottom=6)
+        line = Gtk.Box(spacing=GAP, margin_start=8, margin_end=16, css_classes=["seg"])
+        for w in (ts, spk, txt):
+            line.append(w)
+        self.list.append(Gtk.ListBoxRow(child=line, activatable=False))
+        self.rows.append((seg, line))
+
+    def _highlight(self, pos, playing):
+        """Mark the segment being played; only touches the rows that change."""
+        segs = self.rec.meta.get("segments", [])
+        i = bisect.bisect_right(self._starts, pos) - 1
+        if i < 0 or not playing or pos >= segs[i]["e"] + 0.6:
+            i = None
+        if i == self._cur:
+            return
+        for idx, add in ((self._cur, False), (i, True)):
+            if idx is not None and idx < len(self.rows):
+                (self.rows[idx][1].add_css_class if add else self.rows[idx][1].remove_css_class)("playing")
+        self._cur = i
 
     # ---- actions ----
     def _rename(self, *_):
@@ -172,24 +205,6 @@ class TranscriptPage(Adw.NavigationPage):
         out.write_text(export.to_srt(meta) if kind == "srt" else export.to_txt(meta))
         self.toasts.add_toast(Adw.Toast.new(f"saved {out}"))
 
-    def _remix(self):
-        """Re-render the saved mix from the raw tracks, then reload playback."""
-        self.remix_btn.set_sensitive(False)
-        self.remix_btn.set_label("rendering…")
-        self.player.close()
-        self.ready = False
-        self.play_btn.set_sensitive(False)
-
-        def done(_res, err):
-            self.remix_btn.set_sensitive(True)
-            self.remix_btn.set_label("remove echo from audio")
-            self.toasts.add_toast(Adw.Toast.new(f"failed: {err}" if err else "audio re-rendered without echo"))
-            if self.alive:
-                self.player = Player(self.rec.audio)
-                run_bg(self.player.prepare, self._player_ready)
-
-        run_bg(lambda: encoder.remix(self.rec), done)
-
     # ---- playback ----
     def _player_ready(self, _res, err):
         if err or not self.alive:
@@ -224,6 +239,5 @@ class TranscriptPage(Adw.NavigationPage):
             if dur:
                 self.scale.set_range(0, dur)
             self.scale.set_value(pos)
-            for seg, line in self.rows:
-                (line.add_css_class if seg["s"] <= pos < seg["e"] + 0.6 and self.player.playing else line.remove_css_class)("playing")
+            self._highlight(pos, self.player.playing)
         return True

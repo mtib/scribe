@@ -23,16 +23,37 @@ def test_nearest_turn_fallback():
     assert words[0]["spk"] == "S1"
 
 
-def test_speaker_names_are_anonymous_in_order_of_appearance():
-    turns = [Turn(5, 10, "S1"), Turn(0, 5, "S0"), Turn(10, 15, "S0")]
-    assert merge.speaker_names(turns) == {"S0": "Speaker 1", "S1": "Speaker 2"}
+def test_speaker_names_only_for_speakers_with_words_in_order_of_appearance():
+    words = [{"s": 5, "e": 6, "t": "a", "spk": "S1"}, {"s": 0, "e": 1, "t": "b", "spk": "S0"}, {"s": 9, "e": 10, "t": "c", "spk": "S0"}]
+    assert merge.speaker_names(words) == {"S0": "Speaker 1", "S1": "Speaker 2"}
 
 
-def test_drop_bleed_duplicates():
-    sys_words = [{"s": 8.0, "e": 8.4, "t": "Terrify,"}, {"s": 9.0, "e": 9.3, "t": "me"}]
-    mic_words = [{"s": 8.1, "e": 8.5, "t": "terrify"}, {"s": 8.2, "e": 8.5, "t": "hello"}, {"s": 20.0, "e": 20.3, "t": "me"}]
-    kept = merge.drop_bleed_duplicates(mic_words, sys_words)
-    assert [w["t"] for w in kept] == ["hello", "me"]  # same word far in time is kept
+def test_tiny_speakers_are_dropped_but_never_all():
+    turns = [Turn(0, 20, "S0"), Turn(20, 30, "S1"), Turn(31, 31.4, "S2")]
+    assert {t.speaker for t in merge.drop_tiny_speakers(turns)} == {"S0", "S1"}
+    only_short = [Turn(0, 0.5, "S0"), Turn(1, 1.2, "S1")]
+    assert merge.drop_tiny_speakers(only_short) == only_short
+
+
+def test_assign_speakers_scales_to_ninety_minutes_of_words():
+    import time
+    rng = np.random.default_rng(0)
+    words = [{"s": i * 0.2, "e": i * 0.2 + 0.15, "t": "w"} for i in range(27000)]  # ~90 min of speech
+    turns = [Turn(i * 4.0, i * 4.0 + 3.8, f"S{i % 3}") for i in range(1350)]
+    t = time.time(); merge.assign_speakers(words, turns); assert time.time() - t < 10
+    assert words[0]["spk"] == "S0" and words[25]["spk"] == "S1"
+
+
+def test_bleed_dedupe_matches_brute_force_and_scales():
+    import time
+    rng = np.random.default_rng(1)
+    vocab = ["the", "a", "yes", "no", "okay"]
+    mic = [{"s": float(x), "e": float(x) + 0.2, "t": vocab[int(rng.integers(5))]} for x in sorted(rng.uniform(0, 200, 400))]
+    sysw = [{"s": float(x), "e": float(x) + 0.2, "t": vocab[int(rng.integers(5))]} for x in sorted(rng.uniform(0, 200, 400))]
+    brute = [w for w in mic if not any(abs((o["s"] + o["e"]) / 2 - (w["s"] + w["e"]) / 2) <= 0.45 and merge._norm(o["t"]) == merge._norm(w["t"]) for o in sysw)]
+    assert merge.drop_bleed_duplicates(mic, sysw) == brute
+    big = [{"s": i * 0.3, "e": i * 0.3 + 0.2, "t": "word"} for i in range(15000)]
+    t = time.time(); merge.drop_bleed_duplicates(big, big); assert time.time() - t < 5
 
 
 def test_split_points_pick_quiet_frames():

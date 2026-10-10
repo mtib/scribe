@@ -17,8 +17,7 @@ _Screenshots show the Vantablack theme; the app follows whichever Omarchy theme 
   adaptive filter + residual echo suppressor), then muted whenever the system track has sound, and mixed
   into the saved `.opus`. Speech into the mic *while the system plays* is therefore not in the saved audio,
   but it is still transcribed: each track is transcribed on its own (Parakeet drops one voice when two
-  overlap in one stream). The raw tracks are kept in `.tracks.opus`; "remove echo from audio" re-renders
-  an older recording's mix from them.
+  overlap in one stream). The raw tracks are kept in `.tracks.opus`.
 - Name a recording before, during or after; unnamed ones show the start of the transcript.
 - Follows the active Omarchy theme (`~/.local/state/omarchy/current/theme/colors.toml`).
 
@@ -32,6 +31,19 @@ Recordings live in `~/Recordings/Scribe/` (`<id>.opus`, `<id>.tracks.opus` for
 both-source recordings, `<id>.json` with the transcript). Diarization models
 (~45 MB) are downloaded once to `~/.local/share/scribe/models/` on first
 transcription; this is the only network access.
+
+## Long recordings (90 min+)
+
+Heavy work (saving/mixing, transcription) runs in separate worker processes at low priority, so the
+window stays responsive. Measured on a 4-core, 7.4 GB M1, scaled from a 5-minute dense-speech test:
+
+| Step | Rough cost for 90 min |
+|---|---|
+| Saving after you stop (echo removal + mix + encode) | ~6 min, ~2 GB RAM |
+| Transcription (both tracks) + speaker identification | ~45-65 min, ~3.5 GB RAM (diarization is about 60% of it) |
+| Temp WAVs while recording (both sources) | ~1.5 GB disk |
+
+Leftover temp recordings from a crash are saved on the next launch.
 
 ## Known limitations
 

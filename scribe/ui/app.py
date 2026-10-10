@@ -5,8 +5,10 @@ import gi
 gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1"); gi.require_version("Gio", "2.0")
 from gi.repository import Adw, Gio, GLib, Gtk
 
-from .. import encoder, library, paths, recorder, theme
-from ..jobs import Jobs
+import shutil
+
+from .. import library, paths, recorder, theme
+from ..jobs import Jobs, encode_recording
 from .library_page import LibraryPage
 from .record_page import RecordPage
 from .transcript_page import TranscriptPage
@@ -67,14 +69,12 @@ class Window(Adw.ApplicationWindow):
         """Encode temp WAVs left by a crash into 'recorded' entries."""
         for d in recorder.orphans():
             def work(d=d):
-                rec_id = d.name
-                wavs = {s: d / f"{s}.wav" for s in ("mic", "system") if (d / f"{s}.wav").exists() and (d / f"{s}.wav").stat().st_size > recorder.WAV_HEADER}
-                if wavs:
-                    encoder.encode(wavs.get("mic"), wavs.get("system"), paths.RECORDINGS_DIR / f"{rec_id}.opus")
-                    dur = max(recorder.wav_duration(p) for p in wavs.values())
-                    library.create(rec_id, list(wavs), dur, title="")
-                import shutil
-                shutil.rmtree(d, ignore_errors=True)
+                sources = [x for x in ("mic", "system") if (d / f"{x}.wav").exists() and (d / f"{x}.wav").stat().st_size > recorder.WAV_HEADER]
+                if sources:
+                    seconds = max(recorder.wav_duration(d / f"{x}.wav") for x in sources)
+                    encode_recording(d, d.name, "", seconds, sources)
+                else:
+                    shutil.rmtree(d, ignore_errors=True)
             run_bg(work, lambda *_: self.library.refresh())
 
     def _on_close(self, *_):

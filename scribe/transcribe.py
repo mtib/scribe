@@ -37,8 +37,9 @@ def run(rec, progress=None, num_speakers=None):
             turns = diarize.diarize(mix, num_speakers, lambda f: p(0.5 + f * 0.5, "identifying speakers"))
         except Exception as e:  # diarization is best-effort; keep the transcript
             notice = f"speaker identification failed: {e}"
+        turns = merge.drop_tiny_speakers(turns)
         merge.assign_speakers(words, turns)
-        names = merge.speaker_names(turns) if turns else {"S0": "Speaker 1"}
+        names = merge.speaker_names(words) or {"S0": "Speaker 1"}
         rec.update(
             status="transcribed", model="parakeet-tdt-0.6b-v3-int8", notice=notice,
             speakers=names, words=words, segments=merge.group_segments(words),

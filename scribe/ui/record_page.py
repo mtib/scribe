@@ -2,7 +2,8 @@ import gi
 gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
-from .. import encoder, library, paths
+from .. import library
+from ..jobs import encode_recording
 from ..recorder import Monitor, Recorder
 from .util import GAP, make_header, run_bg
 
@@ -117,12 +118,7 @@ class RecordPage(Adw.NavigationPage):
             dur, wavs = rec.stop()
             if not wavs:
                 raise RuntimeError("nothing was captured")
-            out = paths.RECORDINGS_DIR / f"{rec_id}.opus"
-            paths.RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
-            encoder.encode(wavs.get("mic"), wavs.get("system"), out)
-            r = library.create(rec_id, list(wavs), dur, title=title)
-            rec.cleanup()
-            return r
+            return encode_recording(rec.dir, rec_id, title, dur, list(wavs))
 
         run_bg(work, self._saved)
 
