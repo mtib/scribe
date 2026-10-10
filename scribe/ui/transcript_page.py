@@ -25,7 +25,7 @@ class TranscriptPage(Adw.NavigationPage):
         self.name.add_controller(fc)
         header.set_title_widget(self.name)
         for label, kind in (("srt", "srt"), ("txt", "txt")):
-            b = Gtk.Button(label=label, css_classes=["flat"])
+            b = Gtk.Button(label=label)
             b.connect("clicked", lambda _b, k=kind: self._export(k))
             header.pack_end(b)
 

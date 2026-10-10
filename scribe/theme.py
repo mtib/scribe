@@ -25,6 +25,13 @@ def _on_accent(hex_color):
     return "#000000" if (0.299 * r + 0.587 * g + 0.114 * b) > 150 else "#ffffff"
 
 
+def _mix(a, b, t):
+    """Blend hex color a toward b by t (0..1)."""
+    ha, hb = a.lstrip("#"), b.lstrip("#")
+    ch = [round(int(ha[i:i + 2], 16) * (1 - t) + int(hb[i:i + 2], 16) * t) for i in (0, 2, 4)]
+    return "#%02x%02x%02x" % tuple(ch)
+
+
 def build_css(c):
     bg, fg, acc = c["background"], c["foreground"], c["accent"]
     line = c["selection"]
@@ -37,6 +44,8 @@ def build_css(c):
         "accent_bg_color": acc, "accent_fg_color": _on_accent(acc), "accent_color": acc,
         "destructive_bg_color": c["red"], "destructive_fg_color": _on_accent(c["red"]),
         "borders": line, "muted": c["muted"], "line": line,
+        "ctl_border": _mix(bg, c["muted"], 0.55), "ctl_border_hover": _mix(bg, fg, 0.7),
+        "ctl_hover_bg": _mix(bg, fg, 0.1),
     }
     defs = "\n".join(f"@define-color {k} {v};" for k, v in named.items())
     return defs + "\n" + STATIC_CSS
@@ -46,18 +55,21 @@ STATIC_CSS = """
 * { font-family: monospace; border-radius: 0; box-shadow: none; text-shadow: none; }
 window, .background { background: @window_bg_color; }
 headerbar { background: @window_bg_color; border-bottom: 1px solid @line; min-height: 40px; }
-button { background: transparent; border: 1px solid @line; color: @window_fg_color; padding: 4px 12px; min-height: 24px; }
-button:hover { border-color: @muted; background: transparent; }
-button.cta, button.suggested-action { background: @accent_bg_color; color: @accent_fg_color; border-color: @accent_bg_color; }
+button, entry, searchentry, dropdown > button { background: transparent; border: 1px solid @ctl_border; color: @window_fg_color; padding: 0 12px; min-height: 28px; outline: none; }
+entry, searchentry { padding: 0 8px; }
+button:hover, entry:hover, searchentry:hover, dropdown > button:hover { background: @ctl_hover_bg; border-color: @ctl_border_hover; }
+entry:focus-within, searchentry:focus-within { border-color: @accent_color; }
+button.cta, button.suggested-action { color: @accent_color; border-color: @accent_color; }
+button.cta:hover, button.suggested-action:hover { border-color: @accent_color; }
 button.destructive-action { color: @destructive_bg_color; border-color: @destructive_bg_color; }
 button.flat { border-color: transparent; }
-windowcontrols > button { background: none; border: none; padding: 0; margin: 0 2px; min-width: 28px; min-height: 28px; }
-windowcontrols > button > image { background: none; border: 1px solid transparent; padding: 0; margin: 0; min-width: 26px; min-height: 26px; }
-windowcontrols > button:hover > image { background: none; border-color: @muted; color: @window_fg_color; }
-windowcontrols > button.close:hover > image { background: none; border-color: @destructive_bg_color; color: @destructive_bg_color; }
+button.flat:hover { border-color: @ctl_border_hover; }
 button:checked, togglebutton:checked { background: @card_bg_color; border-color: @accent_color; color: @accent_color; }
-entry, searchentry { background: transparent; border: 1px solid @line; box-shadow: none; outline: none; }
-entry:focus-within, searchentry:focus-within { border-color: @accent_color; }
+windowcontrols > button { background: none; border: none; padding: 0; margin: 0 0 0 6px; min-width: 28px; min-height: 28px; }
+windowcontrols > button > image { background: none; border: 1px solid @ctl_border; padding: 0; margin: 0; min-width: 28px; min-height: 28px; color: @window_fg_color; }
+windowcontrols > button:hover > image { background: @ctl_hover_bg; border-color: @ctl_border_hover; }
+windowcontrols > button.close:hover > image { color: @destructive_bg_color; border-color: @destructive_bg_color; }
+searchentry > text, entry > text { min-height: 0; padding: 0; }
 list, listview { background: transparent; }
 row { border-bottom: 1px solid @line; padding: 0; }
 row:hover { background: @card_bg_color; }

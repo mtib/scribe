@@ -14,7 +14,6 @@ class LibraryPage(Adw.NavigationPage):
 
         header = Adw.HeaderBar()
         header.set_show_back_button(False)
-        header.pack_start(Gtk.Label(label="scribe", css_classes=["title-1"], margin_start=4))
         self.search = Gtk.SearchEntry(placeholder_text="search recordings and transcripts", hexpand=True, max_width_chars=60)
         self.search.connect("search-changed", self._on_search)
         header.set_title_widget(self.search)
