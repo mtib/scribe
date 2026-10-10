@@ -1,8 +1,10 @@
 """Chunked Parakeet TDT transcription using voxtype's model files."""
 import threading
 
+import numpy as np
+
 from . import paths
-from .audio import SR, utterance_cuts
+from .audio import SR, speech_chunks
 from .merge import tokens_to_words
 
 _lock = threading.Lock()
@@ -32,20 +34,38 @@ def load_model():
         return _model
 
 
+# Parakeet (int8) sometimes returns nothing for a chunk that clearly contains speech, and
+# which chunks fail depends chaotically on their exact length. Silence padding of a
+# different length makes it decode, so empty-looking chunks are retried with other pads.
+PADS = ((0.5, 0.5), (2.0, 1.0), (0.0, 0.0), (1.0, 0.5), (3.0, 2.0))
+AUDIBLE_RMS = 0.003  # about -50 dB
+
+
+def _recognize(model, chunk):
+    """Words (chunk-relative times) for one chunk, retrying empty results with other pads."""
+    audible = float(np.sqrt(np.mean(np.square(chunk)))) > AUDIBLE_RMS
+    for lead, trail in PADS:
+        padded = np.concatenate([np.zeros(int(lead * SR), np.float32), chunk, np.zeros(int(trail * SR), np.float32)])
+        r = model.recognize(padded, sample_rate=SR)
+        words = tokens_to_words(r.tokens, r.timestamps)
+        for w in words:
+            w["s"] -= lead
+            w["e"] -= lead
+        if words or not audible:
+            return words
+    return []
+
+
 def transcribe(audio, progress=None, model=None):
     """Return words [{s,e,t}] with absolute timestamps for 16 kHz mono float32 audio."""
     model = model or load_model()
-    bounds = [0, *utterance_cuts(audio), len(audio)]
+    chunks = speech_chunks(audio)
     words = []
-    for i, (a, b) in enumerate(zip(bounds, bounds[1:])):
-        chunk = audio[a:b]
-        if len(chunk) > SR // 4:
-            r = model.recognize(chunk, sample_rate=SR)
-            off = a / SR
-            for w in tokens_to_words(r.tokens, r.timestamps):
-                w["s"] += off
-                w["e"] += off
-                words.append(w)
+    for i, (a, b) in enumerate(chunks):
+        for w in _recognize(model, audio[a:b]):
+            w["s"] = max(0.0, w["s"] + a / SR)
+            w["e"] = max(w["s"], w["e"] + a / SR)
+            words.append(w)
         if progress:
-            progress((i + 1) / (len(bounds) - 1))
+            progress((i + 1) / len(chunks))
     return words

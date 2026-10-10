@@ -38,7 +38,7 @@ def split_points(audio, sr=SR, target=60.0, search=5.0, frame=0.1):
 def activity_intervals(audio, sr=SR, frame=0.05, thresh_db=None, min_gap=0.3, min_len=0.2):
     """(start, end) seconds of speech-level energy; gaps shorter than min_gap are bridged.
 
-    thresh_db=None adapts to the noise floor (10th percentile + 12 dB, capped at -35 dB).
+    thresh_db=None adapts to the noise floor (10th percentile + 12 dB, clamped to -65..-35 dB).
     """
     hop = int(frame * sr)
     k = len(audio) // hop
@@ -47,8 +47,8 @@ def activity_intervals(audio, sr=SR, frame=0.05, thresh_db=None, min_gap=0.3, mi
     rms = np.sqrt(np.square(audio[: k * hop]).reshape(k, hop).mean(axis=1) + 1e-12)
     db = 20 * np.log10(rms)
     if thresh_db is None:
-        thresh_db = min(-35.0, float(np.percentile(db, 10)) + 12.0)
-    active = db > max(thresh_db, -70.0)
+        thresh_db = max(-65.0, min(-35.0, float(np.percentile(db, 10)) + 12.0))
+    active = db > thresh_db
     out, start = [], None
     for i, a in enumerate(active):
         if a and start is None:
@@ -67,17 +67,31 @@ def activity_intervals(audio, sr=SR, frame=0.05, thresh_db=None, min_gap=0.3, mi
     return [(a, b) for a, b in merged if b - a >= min_len]
 
 
-def utterance_cuts(audio, sr=SR, min_gap=0.7, max_len=45.0):
-    """Cut points at the middle of every silence >= min_gap, plus quiet-frame cuts
-    inside any stretch longer than max_len. Parakeet stops decoding after a long
-    pause when given one big window, so every pause becomes a chunk boundary."""
+def speech_chunks(audio, sr=SR, pad=0.3, min_gap=0.7, max_len=45.0):
+    """(start, end) sample ranges to transcribe: each speech stretch plus `pad` seconds,
+    silence skipped. Parakeet stops decoding after a long pause when given one big window,
+    and emits stray words stamped at the end frame when fed trailing silence, so every
+    pause is a chunk boundary and silence is never sent. Stretches longer than max_len are
+    split at their quietest frames. Digital silence returns []; audio no detector call
+    finds speech in (very noisy) is returned whole."""
+    if float(np.abs(audio).max(initial=0.0)) < 1e-4:
+        return []
     ivs = activity_intervals(audio, sr, min_gap=min_gap)
-    cuts = [int((a1 + b0) / 2 * sr) for (_, a1), (b0, _) in zip(ivs, ivs[1:])]
-    bounds = [0, *cuts, len(audio)]
+    if not ivs:
+        ivs = [(0.0, len(audio) / sr)]
     out = []
-    for a, b in zip(bounds, bounds[1:]):
-        if b - a > max_len * sr:
-            out.extend(a + c for c in split_points(audio[a:b], sr, target=max_len * 0.7, search=max_len * 0.2))
-        if b < len(audio):
-            out.append(b)
-    return sorted(set(out))
+    for a, b in ivs:
+        lo, hi = max(0, int((a - pad) * sr)), min(len(audio), int((b + pad) * sr))
+        if out and lo <= out[-1][1]:
+            out[-1] = (out[-1][0], hi)
+        else:
+            out.append((lo, hi))
+    final = []
+    for lo, hi in out:
+        if hi - lo > max_len * sr:
+            cuts = [lo + c for c in split_points(audio[lo:hi], sr, target=max_len * 0.7, search=max_len * 0.2)]
+            bounds = [lo, *cuts, hi]
+            final.extend(zip(bounds, bounds[1:]))
+        else:
+            final.append((lo, hi))
+    return final

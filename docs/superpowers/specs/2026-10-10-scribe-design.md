@@ -106,10 +106,11 @@ Each unit is importable and testable without GTK; `ui` is the only GTK consumer.
 - Diarization models (~40 MB) are not shipped by voxtype. They are downloaded
   once to `~/.local/share/scribe/models/` on first use, with a visible prompt
   (the only network access the app ever makes).
-- **Mic prior (both-sources recordings):** the mic track marks when the local
-  user is speaking. The diarization cluster that overlaps mic activity most is
-  labelled "You"; the remaining clusters are "Speaker N". This makes the local
-  speaker reliable even when clustering is imperfect.
+- **No automatic "You":** several people can share the mic, so speakers are fully anonymous and come
+  only from diarization on the mix. (Superseded the original mic-prior idea.)
+- **Both-source recordings:** the mic is echo-cancelled against the system track (offline partitioned-block
+  NLMS), the cleaned mic is mixed with the system track for the saved file, and each track is transcribed
+  separately (words merged by time, mic words duplicating system words dropped).
 - Speaker count is auto-estimated; the transcript view lets the user rename any
   speaker (persisted in `speakers`) and re-run with a forced speaker count.
 - Mic-only or system-only recordings use diarization alone, without the prior.

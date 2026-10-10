@@ -30,4 +30,5 @@ def test_pipeline(tmp_path):
     assert m["status"] == "transcribed" and m["segments"] and m["words"][0]["s"] >= 0
     assert "lamps" in " ".join(w["t"] for w in m["words"]).lower() or "child" in " ".join(w["t"] for w in m["words"]).lower()
     assert seen and seen[-1][0] <= 1.0
+    assert all(n.startswith("Speaker") for n in m["speakers"].values())  # never auto-"You"
     print(m["speakers"], [(s["spk"], s["text"][:40]) for s in m["segments"]])

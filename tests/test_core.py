@@ -23,12 +23,16 @@ def test_nearest_turn_fallback():
     assert words[0]["spk"] == "S1"
 
 
-def test_local_speaker_label_and_names():
-    turns = [Turn(0, 5, "S0"), Turn(5, 10, "S1"), Turn(10, 15, "S0")]
-    local = merge.label_local_speaker(turns, [(5.5, 9.5)])
-    assert local == "S1"
-    assert merge.speaker_names(turns, local) == {"S0": "Speaker 2", "S1": "You"}
-    assert merge.speaker_names(turns, None) == {"S0": "Speaker 1", "S1": "Speaker 2"}
+def test_speaker_names_are_anonymous_in_order_of_appearance():
+    turns = [Turn(5, 10, "S1"), Turn(0, 5, "S0"), Turn(10, 15, "S0")]
+    assert merge.speaker_names(turns) == {"S0": "Speaker 1", "S1": "Speaker 2"}
+
+
+def test_drop_bleed_duplicates():
+    sys_words = [{"s": 8.0, "e": 8.4, "t": "Terrify,"}, {"s": 9.0, "e": 9.3, "t": "me"}]
+    mic_words = [{"s": 8.1, "e": 8.5, "t": "terrify"}, {"s": 8.2, "e": 8.5, "t": "hello"}, {"s": 20.0, "e": 20.3, "t": "me"}]
+    kept = merge.drop_bleed_duplicates(mic_words, sys_words)
+    assert [w["t"] for w in kept] == ["hello", "me"]  # same word far in time is kept
 
 
 def test_split_points_pick_quiet_frames():
@@ -72,13 +76,21 @@ def test_exports():
     assert "00:00:03,500 --> 00:01:05,250" in export.to_srt(meta)
 
 
-def test_utterance_cuts_at_pauses_and_long_runs():
+def test_speech_chunks_skip_silence_and_split_at_pauses():
     sr = audio.SR
     rng = np.random.default_rng(0)
     speech = lambda sec: (rng.standard_normal(int(sec * sr)) * 0.1).astype(np.float32)
     quiet = lambda sec: np.zeros(int(sec * sr), np.float32)
-    a = np.concatenate([speech(5), quiet(1.5), speech(4)])
-    cuts = audio.utterance_cuts(a)
-    assert len(cuts) == 1 and abs(cuts[0] / sr - 5.75) < 0.2
-    long = speech(100)
-    assert len(audio.utterance_cuts(long)) >= 2
+    a = np.concatenate([quiet(8), speech(5), quiet(1.5), speech(4), quiet(5)])
+    ch = audio.speech_chunks(a)
+    assert len(ch) == 2
+    assert abs(ch[0][0] / sr - 7.7) < 0.2 and abs(ch[1][1] / sr - 18.8) < 0.2  # padded, no leading/trailing silence
+    assert audio.speech_chunks(quiet(10)) == []
+    assert len(audio.speech_chunks(speech(100))) >= 2  # long runs are split
+
+
+def test_quiet_speech_is_not_mistaken_for_silence():
+    sr = audio.SR
+    a = (np.random.default_rng(1).standard_normal(5 * sr) * 0.004).astype(np.float32)  # about -48 dB
+    ch = audio.speech_chunks(a)
+    assert ch and ch[0][0] == 0 and ch[-1][1] == len(a)

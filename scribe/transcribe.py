@@ -1,5 +1,27 @@
-"""Transcription pipeline: ASR + diarization + merge, persisted to the recording JSON."""
-from . import asr, audio, diarize, merge
+"""Transcription pipeline: ASR + diarization + merge, persisted to the recording JSON.
+
+Both-source recordings: the mic is echo-cancelled against the system track and each
+track is transcribed on its own (Parakeet drops one voice when two overlap in one
+stream). Speakers come only from diarization on the mix - the mic is never assumed
+to be a particular person, because several people can share it.
+"""
+from . import aec, asr, audio, diarize, merge
+
+
+def _words(rec, p):
+    """(words, mix_audio) for a recording; p(fraction, label) reports progress."""
+    mix = audio.decode(rec.audio)
+    if not rec.tracks.exists():
+        return asr.transcribe(mix, lambda f: p(f * 0.5, "transcribing")), mix
+    mic = audio.decode(rec.tracks, channel=0)
+    system = audio.decode(rec.tracks, channel=1)
+    raw = mic
+    mic = aec.cancel_echo(raw, system, audio.SR)
+    mic_words = asr.transcribe(mic, lambda f: p(f * 0.25, "transcribing mic"))
+    mic_words = aec.drop_echo_residue(mic_words, mic, raw, system, audio.SR)
+    sys_words = asr.transcribe(system, lambda f: p(0.25 + f * 0.25, "transcribing system"))
+    words = merge.drop_bleed_duplicates(mic_words, sys_words) + sys_words
+    return sorted(words, key=lambda w: w["s"]), mix
 
 
 def run(rec, progress=None, num_speakers=None):
@@ -7,21 +29,16 @@ def run(rec, progress=None, num_speakers=None):
     p = progress or (lambda f, l: None)
     rec.update(status="transcribing", error=None)
     try:
-        samples = audio.decode(rec.audio)
-        words = asr.transcribe(samples, lambda f: p(f * 0.5, "transcribing"))
-        turns, local, notice = [], None, None
+        words, mix = _words(rec, p)
+        turns, notice = [], None
         try:
             if not diarize.models_present():
                 diarize.download_models(lambda f, l: p(0.5, l))
-            turns = diarize.diarize(samples, num_speakers, lambda f: p(0.5 + f * 0.5, "identifying speakers"))
-            if rec.tracks.exists():
-                mic = audio.decode(rec.tracks, channel=0)
-                local = merge.label_local_speaker(turns, audio.activity_intervals(mic))
+            turns = diarize.diarize(mix, num_speakers, lambda f: p(0.5 + f * 0.5, "identifying speakers"))
         except Exception as e:  # diarization is best-effort; keep the transcript
             notice = f"speaker identification failed: {e}"
-            turns = []
         merge.assign_speakers(words, turns)
-        names = merge.speaker_names(turns, local) if turns else {"S0": "Speaker 1"}
+        names = merge.speaker_names(turns) if turns else {"S0": "Speaker 1"}
         rec.update(
             status="transcribed", model="parakeet-tdt-0.6b-v3-int8", notice=notice,
             speakers=names, words=words, segments=merge.group_segments(words),

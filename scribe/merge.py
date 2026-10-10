@@ -62,28 +62,24 @@ def group_segments(words):
     return segs
 
 
-def label_local_speaker(turns, mic_intervals):
-    """Return the speaker id whose turns overlap mic activity most, or None."""
-    totals = {}
-    for t in turns:
-        ov = sum(_overlap(t.start, t.end, a, b) for a, b in mic_intervals)
-        totals[t.speaker] = totals.get(t.speaker, 0.0) + ov
-    if not totals or max(totals.values()) <= 0:
-        return None
-    return max(totals, key=totals.get)
+def _norm(text):
+    return "".join(ch for ch in text.lower() if ch.isalnum())
 
 
-def speaker_names(turns, local=None):
-    """Map raw speaker ids to display names ('You' for local, then 'Speaker N')."""
-    names, n = {}, 1
+def drop_bleed_duplicates(mic_words, sys_words, tol=0.45):
+    """Remove mic words that repeat a system word at the same moment (speaker bleed)."""
+    keep = []
+    for w in mic_words:
+        mid = (w["s"] + w["e"]) / 2
+        dup = any(abs((o["s"] + o["e"]) / 2 - mid) <= tol and _norm(o["t"]) == _norm(w["t"]) for o in sys_words)
+        if not dup:
+            keep.append(w)
+    return keep
+
+
+def speaker_names(turns):
+    """Anonymous display names in order of first appearance: Speaker 1, Speaker 2, ..."""
+    names = {}
     for t in sorted(turns, key=lambda t: t.start):
-        if t.speaker in names:
-            continue
-        if t.speaker == local:
-            names[t.speaker] = "You"
-        else:
-            n += 1
-            names[t.speaker] = f"Speaker {n}"
-    if local is None:  # nobody is "You": number from 1
-        names = {k: f"Speaker {i + 1}" for i, k in enumerate(names)}
+        names.setdefault(t.speaker, f"Speaker {len(names) + 1}")
     return names
