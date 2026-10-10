@@ -54,11 +54,9 @@ def build_css(c):
 STATIC_CSS = """
 * { font-family: monospace; border-radius: 0; box-shadow: none; text-shadow: none; }
 window, .background { background: @window_bg_color; }
-headerbar { background: @window_bg_color; border-bottom: 1px solid @line; min-height: 44px; padding: 0 8px; }
+headerbar { background: @window_bg_color; border-bottom: 1px solid @line; min-height: 44px; padding: 0 2px; }
 headerbar box { border-spacing: 8px; }
 .topbar { padding: 8px; border-spacing: 8px; border-bottom: 1px solid @line; background: @window_bg_color; }
-headerbar button.image-button, button.square { padding: 0; min-width: 28px; }
-button.square label { font-size: 18px; }
 button, entry, searchentry, dropdown > button { background: transparent; border: 1px solid @ctl_border; color: @window_fg_color; padding: 0 12px; min-height: 28px; outline: none; }
 entry, searchentry { padding: 0 8px; }
 button:hover, entry:hover, searchentry:hover, dropdown > button:hover { background: @ctl_hover_bg; border-color: @ctl_border_hover; }

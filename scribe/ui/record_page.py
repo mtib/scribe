@@ -17,6 +17,7 @@ class RecordPage(Adw.NavigationPage):
         self.timer_id = None
 
         header = make_header(win)
+        self.back_btn = header.back_btn
         self.name = Gtk.Entry(placeholder_text="name this recording (optional)", hexpand=True, max_width_chars=48)
 
         self.source_btns = {}
@@ -79,6 +80,7 @@ class RecordPage(Adw.NavigationPage):
         self.rec = rec
         self.action.set_label("stop")
         self.set_can_pop(False)
+        self.back_btn.set_sensitive(False)
         for b in self.source_btns.values():
             b.set_sensitive(False)
         self.timer_id = GLib.timeout_add(80, self._tick)
@@ -116,6 +118,7 @@ class RecordPage(Adw.NavigationPage):
         self.action.set_sensitive(True)
         self.action.set_label("start")
         self.set_can_pop(True)
+        self.back_btn.set_sensitive(True)
         self.clock.set_label("00:00")
         for m in self.meters.values():
             m.set_value(0)

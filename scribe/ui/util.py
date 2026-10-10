@@ -23,15 +23,21 @@ def fmt_dur(sec):
 
 
 def make_header(win, back=True):
-    """Header bar whose close button is an ordinary button, so it matches all others."""
-    bar = Adw.HeaderBar(show_end_title_buttons=False, show_start_title_buttons=False, show_back_button=back,
+    """Header bar with text buttons: `back` (start, if back) and `quit` (end).
+    The back button is exposed as bar.back_btn so pages can disable it."""
+    bar = Adw.HeaderBar(show_end_title_buttons=False, show_start_title_buttons=False, show_back_button=False,
                         centering_policy=Adw.CenteringPolicy.LOOSE)
+    bar.back_btn = None
+    if back:
+        bar.back_btn = Gtk.Button(label="back")
+        bar.back_btn.connect("clicked", lambda *_: win.nav.pop())
+        bar.pack_start(bar.back_btn)
     bar.pack_end(close_button(win))
     return bar
 
 
 def close_button(win):
-    btn = Gtk.Button(label="×", tooltip_text="close", css_classes=["square"])
+    btn = Gtk.Button(label="quit")
     btn.connect("clicked", lambda *_: win.close())
     return btn
 
