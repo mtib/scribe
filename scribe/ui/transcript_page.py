@@ -4,7 +4,7 @@ import gi
 gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
-from .. import export, library
+from .. import asr, export, library
 from .player import Player
 from .util import GAP, back_button, make_topbar, run_bg
 
@@ -65,6 +65,14 @@ class TranscriptPage(Adw.NavigationPage):
         foot.append(Gtk.Label(label="speakers", css_classes=["dim"]))
         foot.append(self.count)
         foot.append(redo)
+        # language = transcription model; changing it transcribes again
+        self.lang_keys = list(asr.LANGUAGES)
+        self.lang = Gtk.DropDown.new_from_strings(list(asr.LANGUAGES.values()))
+        self.lang.set_selected(self.lang_keys.index(self._rec_language()))
+        self.lang.connect("notify::selected", self._on_language)
+        foot.append(Gtk.Box(hexpand=True))
+        foot.append(Gtk.Label(label="language", css_classes=["dim"]))
+        foot.append(self.lang)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         for w in (bar, self.status, self.progress, self.retry, scroller, foot):
             box.append(w)
@@ -86,6 +94,16 @@ class TranscriptPage(Adw.NavigationPage):
     def _speakers(self):
         i = self.count.get_selected()
         return None if i == 0 else i
+
+    def _rec_language(self):
+        lang = self.rec.meta.get("language")
+        return lang if lang in asr.LANGUAGES else asr.DEFAULT_LANGUAGE
+
+    def _on_language(self, *_):
+        lang = self.lang_keys[self.lang.get_selected()]
+        if lang != self._rec_language() and not self.win.jobs.active(self.rec.id):
+            self.rec.update(language=lang)
+            self._start_job(self._speakers())
 
     def _start_job(self, n=None):
         self.win.jobs.start(self.rec, n, on_done=lambda r: None)
@@ -109,6 +127,7 @@ class TranscriptPage(Adw.NavigationPage):
                 self.status.set_label("not transcribed yet")
             elif self.rec.meta.get("notice"):
                 self.status.set_label(self.rec.meta["notice"])
+        self.lang.set_sensitive(not job)
         self.retry.set_visible(not job and self.rec.status in ("recorded", "failed", "transcribing"))
         self.retry.set_label("retry" if self.rec.status == "failed" else "transcribe")
         if state != self.last_status:

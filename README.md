@@ -11,6 +11,9 @@ _Screenshots show the Vantablack theme; the app follows whichever Omarchy theme 
 - Records **mic**, **system audio** or **both** to one mixed **Opus** file.
 - Transcribes with **Parakeet TDT v3** using the model voxtype already downloaded
   (`~/.local/share/voxtype/models/parakeet-tdt-0.6b-v3-int8`), with **word timestamps**.
+- Pick the language per recording: **english + german** (Parakeet TDT v3, 25 European languages) or
+  **english** (Parakeet TDT 110M, English only, about 2x faster end to end and somewhat less accurate on
+  names and fast speech). Change it on the transcript page to transcribe again.
 - **Speaker diarization** (sherpa-onnx) on the mix. Speakers are anonymous ("Speaker 1", ...); the mic is
   never assumed to be one person. Rename or merge speakers, or force a speaker count.
 - **Echo removal** for "both" recordings: the mic is echo-cancelled against the system track (linear
@@ -30,7 +33,7 @@ _Screenshots show the Vantablack theme; the app follows whichever Omarchy theme 
 Recordings live in `~/Recordings/Scribe/` (`<id>.opus`, `<id>.tracks.opus` for
 both-source recordings, `<id>.json` with the transcript). Diarization models
 (~35 MB: pyannote segmentation + CAM++ speaker embedding) are downloaded once to `~/.local/share/scribe/models/` on first
-transcription; this is the only network access.
+transcription, and the English-only model (~136 MB) the first time it is picked; this is the only network access.
 
 ## Long recordings (90 min+)
 
@@ -42,7 +45,8 @@ dense two-track speech, scaled to 90 minutes:
 | Step | 5 min measured | ~90 min | RAM |
 |---|---|---|---|
 | Saving after you stop (echo removal + mix + encode) | 8.6 s | ~2.5 min | ~1-2 GB |
-| Transcription (both tracks) + speaker identification | 47.7 s (0.16x realtime) | ~15 min | ~3.5 GB |
+| Transcription (both tracks) + speaker identification, english + german | 47.7 s (0.16x realtime) | ~15 min | ~3.5 GB |
+| Same with the english-only model | ~21 s (0.07x realtime) | ~7 min | |
 | Temp WAVs while recording (both sources) | | ~1.5 GB disk | |
 
 Timings vary by up to 2x with memory pressure (swap) on an 8 GB machine; compare runs made back to back.
