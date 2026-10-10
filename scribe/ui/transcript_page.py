@@ -155,7 +155,9 @@ class TranscriptPage(Adw.NavigationPage):
                 self.last_status = None
                 self._reload()
         dlg.connect("response", done)
+        dlg.set_focus(entry)
         dlg.present(self.win)
+        entry.grab_focus()  # select the current name so typing replaces it
 
     def _export(self, kind):
         meta = self.rec.meta
