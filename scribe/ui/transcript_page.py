@@ -2,7 +2,7 @@ import gi
 gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
-from .. import export, library
+from .. import encoder, export, library
 from .player import Player
 from .util import GAP, back_button, make_topbar, run_bg
 
@@ -57,6 +57,10 @@ class TranscriptPage(Adw.NavigationPage):
         foot.append(Gtk.Label(label="speakers", css_classes=["dim"]))
         foot.append(self.count)
         foot.append(redo)
+        # recordings with separate tracks can have their saved mix re-rendered with echo removed
+        self.remix_btn = Gtk.Button(label="remove echo from audio", visible=rec.tracks.exists())
+        self.remix_btn.connect("clicked", lambda *_: self._remix())
+        foot.append(self.remix_btn)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         for w in (bar, self.status, self.progress, self.retry, scroller, foot):
@@ -167,6 +171,24 @@ class TranscriptPage(Adw.NavigationPage):
         out = self.rec.dir / f"{self.rec.id}.{kind}"
         out.write_text(export.to_srt(meta) if kind == "srt" else export.to_txt(meta))
         self.toasts.add_toast(Adw.Toast.new(f"saved {out}"))
+
+    def _remix(self):
+        """Re-render the saved mix from the raw tracks, then reload playback."""
+        self.remix_btn.set_sensitive(False)
+        self.remix_btn.set_label("rendering…")
+        self.player.close()
+        self.ready = False
+        self.play_btn.set_sensitive(False)
+
+        def done(_res, err):
+            self.remix_btn.set_sensitive(True)
+            self.remix_btn.set_label("remove echo from audio")
+            self.toasts.add_toast(Adw.Toast.new(f"failed: {err}" if err else "audio re-rendered without echo"))
+            if self.alive:
+                self.player = Player(self.rec.audio)
+                run_bg(self.player.prepare, self._player_ready)
+
+        run_bg(lambda: encoder.remix(self.rec), done)
 
     # ---- playback ----
     def _player_ready(self, _res, err):
