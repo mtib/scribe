@@ -125,7 +125,7 @@ class ThemeWatcher:
 
 class App(Adw.Application):
     def __init__(self):
-        super().__init__(application_id="dev.mtib.scribe")
+        super().__init__(application_id=os.environ.get("SCRIBE_APP_ID", "dev.mtib.scribe"))
 
     def do_activate(self):
         win = self.props.active_window

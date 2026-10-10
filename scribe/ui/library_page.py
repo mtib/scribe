@@ -3,7 +3,7 @@ gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk, Pango
 
 from .. import asr, library
-from .util import fmt_dur, make_topbar
+from .util import GAP, fmt_dur, make_topbar
 
 
 class LibraryPage(Adw.NavigationPage):
@@ -16,7 +16,7 @@ class LibraryPage(Adw.NavigationPage):
         self.search.connect("search-changed", self._on_search)
         new = Gtk.Button(label="new recording", css_classes=["cta"])
         new.connect("clicked", lambda *_: win.open_record())
-        header = make_topbar(win, self.search, new)
+        header = make_topbar(self.search, new)
 
         self.banner = Gtk.Label(wrap=True, xalign=0, css_classes=["banner"], margin_start=16, margin_end=16, margin_top=8)
         self.banner.set_visible(False)
@@ -82,7 +82,7 @@ class LibraryPage(Adw.NavigationPage):
         text.append(sub)
         rm = Gtk.Button(label="delete", css_classes=["flat", "dim"], valign=Gtk.Align.CENTER)
         rm.connect("clicked", lambda *_: self.win.confirm_delete(rec))
-        box = Gtk.Box(spacing=12, margin_start=16, margin_end=16, margin_top=10, margin_bottom=10)
+        box = Gtk.Box(spacing=GAP, margin_start=16, margin_end=16, margin_top=10, margin_bottom=10)
         box.append(text)
         box.append(rm)
         row = Gtk.ListBoxRow(child=box, activatable=True)

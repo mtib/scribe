@@ -4,7 +4,7 @@ from gi.repository import Adw, GLib, Gtk
 
 from .. import encoder, library, paths
 from ..recorder import Recorder
-from .util import make_header, run_bg
+from .util import GAP, make_header, run_bg
 
 SOURCES = {"mic": ["mic"], "system": ["system"], "both": ["mic", "system"]}
 
@@ -21,7 +21,7 @@ class RecordPage(Adw.NavigationPage):
         self.name = Gtk.Entry(placeholder_text="name this recording (optional)", hexpand=True, max_width_chars=48)
 
         self.source_btns = {}
-        srcbox = Gtk.Box(spacing=0, halign=Gtk.Align.CENTER, css_classes=["linked"])
+        srcbox = Gtk.Box(spacing=GAP, halign=Gtk.Align.CENTER)
         first = None
         for key in SOURCES:
             b = Gtk.ToggleButton(label=key, group=first)
@@ -32,10 +32,10 @@ class RecordPage(Adw.NavigationPage):
 
         self.clock = Gtk.Label(label="00:00", css_classes=["timer"], margin_top=24, margin_bottom=8)
         self.meters = {k: Gtk.LevelBar(min_value=0, max_value=1, hexpand=True) for k in ("mic", "system")}
-        meters = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin_top=16)
+        meters = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=GAP, margin_top=16)
         self.meter_rows = {}
         for k, m in self.meters.items():
-            row = Gtk.Box(spacing=12)
+            row = Gtk.Box(spacing=GAP)
             row.append(Gtk.Label(label=k, css_classes=["dim"], width_chars=7, xalign=0))
             row.append(m)
             self.meter_rows[k] = row
@@ -45,7 +45,7 @@ class RecordPage(Adw.NavigationPage):
         self.action = Gtk.Button(label="start", css_classes=["cta"], halign=Gtk.Align.CENTER, margin_top=24)
         self.action.connect("clicked", self._on_action)
 
-        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin_top=24, margin_start=24, margin_end=24, margin_bottom=24, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, width_request=420)
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=GAP, margin_top=24, margin_start=24, margin_end=24, margin_bottom=24, halign=Gtk.Align.CENTER, valign=Gtk.Align.CENTER, width_request=420)
         for w in (self.name, srcbox, self.clock, meters, self.error, self.action):
             col.append(w)
         tv = Adw.ToolbarView(content=col)

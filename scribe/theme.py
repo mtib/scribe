@@ -56,13 +56,12 @@ STATIC_CSS = """
 window, .background { background: @window_bg_color; }
 headerbar { background: @window_bg_color; border-bottom: 1px solid @line; min-height: 44px; padding: 0 2px; }
 headerbar box { border-spacing: 8px; }
-.topbar { padding: 8px; border-spacing: 8px; border-bottom: 1px solid @line; background: @window_bg_color; }
+.topbar { padding: 8px; border-bottom: 1px solid @line; background: @window_bg_color; }
 button, entry, searchentry, dropdown > button { background: transparent; border: 1px solid @ctl_border; color: @window_fg_color; padding: 0 12px; min-height: 28px; outline: none; }
 entry, searchentry { padding: 0 8px; }
 button:hover, entry:hover, searchentry:hover, dropdown > button:hover { background: @ctl_hover_bg; border-color: @ctl_border_hover; }
 entry:focus-within, searchentry:focus-within { border-color: @accent_color; }
-button.cta, button.suggested-action { color: @accent_color; border-color: @accent_color; }
-button.cta:hover, button.suggested-action:hover { border-color: @accent_color; }
+button.cta, button.suggested-action { color: @window_fg_color; border-color: @ctl_border_hover; font-weight: bold; }
 button.destructive-action { color: @destructive_bg_color; border-color: @destructive_bg_color; }
 button.flat { border-color: transparent; }
 button.flat:hover { border-color: @ctl_border_hover; }

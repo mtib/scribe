@@ -2,6 +2,12 @@
 
 Local, offline recorder + transcriber for Omarchy (GTK4 / libadwaita).
 
+| Library | Transcript | Record |
+|---|---|---|
+| ![library](docs/screenshots/library.png) | ![transcript](docs/screenshots/transcript.png) | ![record](docs/screenshots/record.png) |
+
+_Screenshots show the Vantablack theme; the app follows whichever Omarchy theme is active. The demo audio is two short LibriSpeech clips._
+
 - Records **mic**, **system audio** or **both** to one mixed **Opus** file.
 - Transcribes with **Parakeet TDT v3** using the model voxtype already downloaded
   (`~/.local/share/voxtype/models/parakeet-tdt-0.6b-v3-int8`), with **word timestamps**.
@@ -28,4 +34,8 @@ transcription; this is the only network access.
 - System capture records everything audible on the default sink.
 - Diarization may over-split speakers; use rename-to-merge or the speaker count.
 
-`SCRIBE_OPEN=record|<recording id>` opens that page at startup (testing aid).
+## Testing aids
+
+- `SCRIBE_OPEN=record|<recording id>` opens that page at startup.
+- `SCRIBE_RECORDINGS_DIR=<dir>` uses a different library; `SCRIBE_APP_ID=<id>` allows a second instance.
+- Playback uses `mpv` (JSON IPC); recording needs `pw-record` (PipeWire) and `ffmpeg` with libopus.

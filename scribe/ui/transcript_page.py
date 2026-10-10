@@ -4,7 +4,7 @@ from gi.repository import Adw, GLib, Gtk
 
 from .. import export, library
 from .player import Player
-from .util import make_header, run_bg
+from .util import GAP, back_button, make_topbar, run_bg
 
 
 class TranscriptPage(Adw.NavigationPage):
@@ -17,17 +17,17 @@ class TranscriptPage(Adw.NavigationPage):
         self.last_status = None
         self.alive = True
 
-        header = make_header(win)
-        self.name = Gtk.Entry(text=rec.title, placeholder_text=rec.display_title, width_chars=34, max_width_chars=48, xalign=0.5)
+        self.name = Gtk.Entry(text=rec.title, placeholder_text=rec.display_title, hexpand=True)
         self.name.connect("activate", self._rename)
         fc = Gtk.EventControllerFocus()
         fc.connect("leave", self._rename)
         self.name.add_controller(fc)
-        header.set_title_widget(self.name)
-        for label, kind in (("srt", "srt"), ("txt", "txt")):
+        exports = []
+        for label in ("txt", "srt"):
             b = Gtk.Button(label=label)
-            b.connect("clicked", lambda _b, k=kind: self._export(k))
-            header.pack_end(b)
+            b.connect("clicked", lambda _b, k=label: self._export(k))
+            exports.append(b)
+        header = make_topbar(back_button(win), self.name, *exports)
 
         # playback bar
         self.play_btn = Gtk.Button(label="play", sensitive=False)
@@ -36,7 +36,7 @@ class TranscriptPage(Adw.NavigationPage):
         self.scale.set_range(0, max(1.0, rec.duration))
         self.scale.connect("change-value", self._on_scrub)
         self.time = Gtk.Label(label="00:00", css_classes=["dim"], width_chars=6)
-        bar = Gtk.Box(spacing=12, margin_start=16, margin_end=16, margin_top=8, margin_bottom=8)
+        bar = Gtk.Box(spacing=GAP, margin_start=16, margin_end=16, margin_top=8, margin_bottom=8)
         for w in (self.play_btn, self.scale, self.time):
             bar.append(w)
 
@@ -53,7 +53,7 @@ class TranscriptPage(Adw.NavigationPage):
         self.count = Gtk.DropDown.new_from_strings(["auto"] + [str(i) for i in range(1, 9)])
         redo = Gtk.Button(label="re-identify speakers")
         redo.connect("clicked", lambda *_: self._start_job(self._speakers()))
-        foot = Gtk.Box(spacing=8, margin_start=16, margin_end=16, margin_top=8, margin_bottom=8)
+        foot = Gtk.Box(spacing=GAP, margin_start=16, margin_end=16, margin_top=8, margin_bottom=8)
         foot.append(Gtk.Label(label="speakers", css_classes=["dim"]))
         foot.append(self.count)
         foot.append(redo)
@@ -120,7 +120,7 @@ class TranscriptPage(Adw.NavigationPage):
             spk.get_child().set_xalign(0)
             spk.connect("clicked", lambda _b, s=seg["spk"]: self._rename_speaker(s))
             txt = Gtk.Label(label=seg["text"], wrap=True, xalign=0, hexpand=True, selectable=True, margin_top=6, margin_bottom=6)
-            line = Gtk.Box(spacing=8, margin_start=8, margin_end=16, css_classes=["seg"])
+            line = Gtk.Box(spacing=GAP, margin_start=8, margin_end=16, css_classes=["seg"])
             for w in (ts, spk, txt):
                 line.append(w)
             row = Gtk.ListBoxRow(child=line, activatable=False)
@@ -143,7 +143,8 @@ class TranscriptPage(Adw.NavigationPage):
         dlg.add_response("cancel", "cancel")
         dlg.add_response("ok", "rename")
         dlg.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
-        entry.connect("activate", lambda *_: dlg.response("ok") if False else dlg.close())
+        dlg.set_default_response("ok")
+        entry.set_activates_default(True)
 
         def done(_d, resp):
             name = entry.get_text().strip()
