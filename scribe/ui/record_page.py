@@ -3,7 +3,7 @@ gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
 from .. import encoder, library, paths
-from ..recorder import Recorder
+from ..recorder import Monitor, Recorder
 from .util import GAP, make_header, run_bg
 
 SOURCES = {"mic": ["mic"], "system": ["system"], "both": ["mic", "system"]}
@@ -14,7 +14,8 @@ class RecordPage(Adw.NavigationPage):
         super().__init__(title="new recording", tag="record")
         self.win = win
         self.rec = None
-        self.timer_id = None
+        self.monitor = Monitor()
+        self.shown_levels = {}
 
         header = make_header(win)
         self.back_btn = header.back_btn
@@ -52,8 +53,11 @@ class RecordPage(Adw.NavigationPage):
         tv.add_top_bar(header)
         self.set_child(tv)
         for b in self.source_btns.values():
-            b.connect("toggled", lambda *_: self._sync_meters())
+            b.connect("toggled", lambda *_: (self._sync_meters(), self._monitor_on()))
         self._sync_meters()
+        self.connect("showing", lambda *_: self._monitor_on())
+        self.connect("hidden", lambda *_: self.monitor.stop())
+        GLib.timeout_add(80, self._tick)
 
     def _selected(self):
         return next(k for k, b in self.source_btns.items() if b.get_active())
@@ -63,6 +67,11 @@ class RecordPage(Adw.NavigationPage):
         for k, row in self.meter_rows.items():
             row.set_visible(k in sel)
 
+    def _monitor_on(self):
+        """Live meters for the selected sources while idle (nothing is recorded)."""
+        if not self.rec:
+            self.monitor.start(SOURCES[self._selected()])
+
     def _on_action(self, *_):
         self._stop() if self.rec else self._start()
 
@@ -71,11 +80,13 @@ class RecordPage(Adw.NavigationPage):
         self.rec_id = library.new_id()
         self.sources = SOURCES[self._selected()]
         rec = Recorder(self.sources, self.rec_id)
+        self.monitor.stop()
         try:
             rec.start()
         except Exception as e:
             self.error.set_label(str(e))
             self.error.set_visible(True)
+            self._monitor_on()
             return
         self.rec = rec
         self.action.set_label("stop")
@@ -83,15 +94,16 @@ class RecordPage(Adw.NavigationPage):
         self.back_btn.set_sensitive(False)
         for b in self.source_btns.values():
             b.set_sensitive(False)
-        self.timer_id = GLib.timeout_add(80, self._tick)
 
     def _tick(self):
-        if not self.rec:
-            return False
-        m, s = divmod(int(self.rec.elapsed()), 60)
-        self.clock.set_label(f"{m:02}:{s:02}")
-        for src in self.sources:
-            self.meters[src].set_value(min(1.0, self.rec.level(src) * 2.5))
+        if self.rec:
+            m, sec = divmod(int(self.rec.elapsed()), 60)
+            self.clock.set_label(f"{m:02}:{sec:02}")
+        for src in SOURCES[self._selected()]:
+            raw = self.rec.level(src) if self.rec else self.monitor.level(src)
+            lvl = max(min(1.0, raw * 2.5), self.shown_levels.get(src, 0.0) * 0.85)  # fast attack, soft decay
+            self.shown_levels[src] = lvl
+            self.meters[src].set_value(lvl)
         return True
 
     def _stop(self):
@@ -128,6 +140,7 @@ class RecordPage(Adw.NavigationPage):
         if err:
             self.error.set_label(f"save failed: {err}")
             self.error.set_visible(True)
+            self._monitor_on()
             return
         self.win.finish_recording(recording)
 

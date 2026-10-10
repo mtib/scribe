@@ -1,5 +1,7 @@
 """Capture mic and/or system audio with one pw-record process per source."""
+import atexit
 import json
+import threading
 import shutil
 import signal
 import struct
@@ -27,12 +29,8 @@ class Recorder:
         self.dir.mkdir(parents=True, exist_ok=True)
         (self.dir / "meta.json").write_text(json.dumps({"sources": self.sources, "started": time.time()}))
         for src in self.sources:
-            cmd = ["pw-record", "--rate", "48000", "--format", "s16"]
-            if src == "mic":
-                cmd += ["--channels", "1"]
-            else:
-                cmd += ["--channels", "2", "-P", "{ stream.capture.sink=true }", "--target", "@DEFAULT_SINK@"]
-            self.procs[src] = subprocess.Popen(cmd + [str(self.path(src))], stderr=subprocess.PIPE)
+            cmd = capture_cmd(src, 48000, self.path(src))
+            self.procs[src] = subprocess.Popen(cmd, stderr=subprocess.PIPE)
         self.started = time.time()
         time.sleep(0.3)
         for src, p in self.procs.items():
@@ -83,6 +81,63 @@ class Recorder:
 
     def cleanup(self):
         shutil.rmtree(self.dir, ignore_errors=True)
+
+
+def capture_cmd(src, rate, out, channels=None):
+    """pw-record command for a source ('mic' or the default sink's monitor)."""
+    ch = channels or (1 if src == "mic" else 2)
+    cmd = ["pw-record", "--rate", str(rate), "--format", "s16", "--channels", str(ch)]
+    if src == "system":
+        cmd += ["-P", "{ stream.capture.sink=true }", "--target", "@DEFAULT_SINK@"]
+    return cmd + [str(out)]
+
+
+class Monitor:
+    """Level-only capture so meters move before recording starts (nothing is stored)."""
+
+    CHUNK = 1600  # samples @16 kHz = 100 ms
+
+    def __init__(self):
+        self.procs = {}
+        self.levels = {}
+        atexit.register(self.stop)
+
+    def start(self, sources):
+        self.stop()
+        for src in sources:
+            try:
+                p = subprocess.Popen(capture_cmd(src, 16000, "-", channels=1), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            except OSError:
+                continue
+            self.procs[src] = p
+            self.levels[src] = 0.0
+            threading.Thread(target=self._read, args=(src, p), daemon=True).start()
+
+    def _read(self, src, proc):
+        import numpy as np
+        out = proc.stdout
+        out.read(WAV_HEADER)
+        while True:
+            raw = out.read(self.CHUNK * 2)
+            if len(raw) < self.CHUNK * 2:
+                break
+            a = np.frombuffer(raw, dtype=np.int16)
+            self.levels[src] = float(np.abs(a).max()) / 32768
+        self.levels[src] = 0.0
+
+    def level(self, src):
+        return self.levels.get(src, 0.0)
+
+    def stop(self):
+        procs, self.procs = self.procs, {}
+        for p in procs.values():
+            p.terminate()
+        for p in procs.values():
+            try:
+                p.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                p.kill()
+        self.levels = {}
 
 
 def orphans():
