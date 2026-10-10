@@ -51,6 +51,11 @@ button:hover { border-color: @muted; background: transparent; }
 button.cta, button.suggested-action { background: @accent_bg_color; color: @accent_fg_color; border-color: @accent_bg_color; }
 button.destructive-action { color: @destructive_bg_color; border-color: @destructive_bg_color; }
 button.flat { border-color: transparent; }
+windowcontrols > button { background: none; border: none; padding: 0; margin: 0 2px; min-width: 28px; min-height: 28px; }
+windowcontrols > button > image { background: none; border: 1px solid transparent; padding: 0; margin: 0; min-width: 26px; min-height: 26px; }
+windowcontrols > button:hover > image { background: none; border-color: @muted; color: @window_fg_color; }
+windowcontrols > button.close:hover > image { background: none; border-color: @destructive_bg_color; color: @destructive_bg_color; }
+button:checked, togglebutton:checked { background: @card_bg_color; border-color: @accent_color; color: @accent_color; }
 entry, searchentry { background: transparent; border: 1px solid @line; box-shadow: none; outline: none; }
 entry:focus-within, searchentry:focus-within { border-color: @accent_color; }
 list, listview { background: transparent; }
@@ -71,7 +76,7 @@ progressbar trough { background: @line; min-height: 2px; border: none; }
 progressbar progress { background: @accent_color; min-height: 2px; }
 scale trough { background: @line; min-height: 2px; }
 scale highlight { background: @accent_color; }
-scale slider { background: @window_fg_color; min-width: 8px; min-height: 8px; }
+scale slider { background: @window_fg_color; min-width: 8px; min-height: 8px; margin: -4px; padding: 0; border: none; }
 .seg.playing { background: @card_bg_color; border-left: 2px solid @accent_color; }
 banner, .banner { background: @card_bg_color; border: 1px solid @line; padding: 6px 12px; }
 """
