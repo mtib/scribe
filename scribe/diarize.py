@@ -9,9 +9,11 @@ from .merge import Turn
 
 BASE = "https://github.com/k2-fsa/sherpa-onnx/releases/download"
 SEG_URL = f"{BASE}/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2"
-EMB_URL = f"{BASE}/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx"
+# CAM++ (bilingual zh+en): ~2x faster than the ERes2Net model used before and got the right speaker count
+# on every test recording (ERes2Net over-split a 4-speaker clip into 5).
+EMB_URL = f"{BASE}/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx"
 SEG_FILE = "pyannote-segmentation-3-0.onnx"
-EMB_FILE = "3dspeaker-eres2net-base-16k.onnx"
+EMB_FILE = "3dspeaker-campplus-zh-en-16k.onnx"
 THRESHOLD = 0.7
 
 

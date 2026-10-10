@@ -43,3 +43,17 @@ def test_monitor_reports_system_level():
     mon.stop()
     assert max(seen + [peak]) > 0.05, seen
     assert mon.procs == {}
+
+
+def test_worker_cpu_selection():
+    import os
+    from scribe import jobs
+    os.environ["SCRIBE_WORKER_CPUS"] = "4-7"
+    try:
+        assert jobs.performance_cpus() == {4, 5, 6, 7}
+        os.environ["SCRIBE_WORKER_CPUS"] = "0,2"
+        assert jobs.performance_cpus() == {0, 2}
+    finally:
+        del os.environ["SCRIBE_WORKER_CPUS"]
+    fast = jobs.performance_cpus()  # detection from sysfs
+    assert fast is None or (fast and len(fast) < os.cpu_count())

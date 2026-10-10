@@ -10,10 +10,44 @@ import signal
 import subprocess
 import sys
 import threading
+from pathlib import Path
+
+
+def performance_cpus():
+    """CPUs with the highest max frequency on a heterogeneous (big.LITTLE / Apple P+E) CPU, else None.
+
+    SCRIBE_WORKER_CPUS (e.g. "4-7" or "0,2") overrides the detection."""
+    spec = os.environ.get("SCRIBE_WORKER_CPUS")
+    if spec:
+        cpus = set()
+        for part in spec.split(","):
+            lo, _, hi = part.partition("-")
+            cpus.update(range(int(lo), int(hi or lo) + 1))
+        return cpus
+    freqs = {}
+    try:
+        for d in Path("/sys/devices/system/cpu").glob("cpu[0-9]*"):
+            freqs[int(d.name[3:])] = int((d / "cpufreq/cpuinfo_max_freq").read_text())
+    except (OSError, ValueError):
+        return None
+    top = max(freqs.values(), default=0)
+    fast = {c for c, f in freqs.items() if f == top}
+    return fast if fast and len(fast) < len(freqs) else None
+
+
+_PERF_CPUS = performance_cpus()
 
 
 def _child_setup():
     os.nice(10)  # keep the UI responsive when the worker saturates the cores
+    # Run on the performance cores. Affinity is inherited, and on this M1 the compositor is pinned
+    # to the efficiency cores, so anything launched from a keybind/terminal would otherwise be
+    # confined to them (measured 2-3x slower).
+    if _PERF_CPUS:
+        try:
+            os.sched_setaffinity(0, _PERF_CPUS)
+        except OSError:
+            pass
     try:  # Linux: die with the app instead of lingering as an orphan
         ctypes.CDLL("libc.so.6").prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
     except OSError:

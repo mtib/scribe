@@ -29,19 +29,24 @@ _Screenshots show the Vantablack theme; the app follows whichever Omarchy theme 
 
 Recordings live in `~/Recordings/Scribe/` (`<id>.opus`, `<id>.tracks.opus` for
 both-source recordings, `<id>.json` with the transcript). Diarization models
-(~45 MB) are downloaded once to `~/.local/share/scribe/models/` on first
+(~35 MB: pyannote segmentation + CAM++ speaker embedding) are downloaded once to `~/.local/share/scribe/models/` on first
 transcription; this is the only network access.
 
 ## Long recordings (90 min+)
 
-Heavy work (saving/mixing, transcription) runs in separate worker processes at low priority, so the
-window stays responsive. Measured on a 4-core, 7.4 GB M1, scaled from a 5-minute dense-speech test:
+Heavy work (saving/mixing, transcription) runs in separate worker processes, pinned to the fastest CPU
+cores (the performance cores on Apple Silicon; override with `SCRIBE_WORKER_CPUS=4-7`), so the window
+stays responsive. Measured on an M1 MacBook Air (4 performance cores, 7.4 GB RAM) with 5 minutes of
+dense two-track speech, scaled to 90 minutes:
 
-| Step | Rough cost for 90 min |
-|---|---|
-| Saving after you stop (echo removal + mix + encode) | ~6 min, ~2 GB RAM |
-| Transcription (both tracks) + speaker identification | ~45-65 min, ~3.5 GB RAM (diarization is about 60% of it) |
-| Temp WAVs while recording (both sources) | ~1.5 GB disk |
+| Step | 5 min measured | ~90 min | RAM |
+|---|---|---|---|
+| Saving after you stop (echo removal + mix + encode) | 8.6 s | ~2.5 min | ~1-2 GB |
+| Transcription (both tracks) + speaker identification | 71.5 s (0.24x realtime) | ~20-25 min | ~3.5 GB |
+| Temp WAVs while recording (both sources) | | ~1.5 GB disk | |
+
+There is no GPU/Neural-Engine path on Linux for these models (only the CPU build of ONNX Runtime is
+available), so the CPU cores are the limit.
 
 Leftover temp recordings from a crash are saved on the next launch.
 
