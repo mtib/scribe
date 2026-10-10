@@ -1,4 +1,5 @@
 """Chunked Parakeet TDT transcription using voxtype's model files."""
+import os
 import threading
 
 import numpy as np
@@ -28,8 +29,17 @@ def load_model():
         if _model is None:
             check_model()
             import onnx_asr
+            import onnxruntime as ort
+
+            # Always give ONNX Runtime an explicit thread count. With the default (0) it sizes its
+            # pool to every CPU in the machine and pins thread i to CPU i, which overrides the
+            # process CPU mask: on the M1 that put workers on the efficiency cores (and on the
+            # compositor's cores) even though they were started on the performance cores.
+            opts = ort.SessionOptions()
+            opts.intra_op_num_threads = len(os.sched_getaffinity(0))
+            opts.inter_op_num_threads = 1
             _model = onnx_asr.load_model(
-                "nemo-parakeet-tdt-0.6b-v3", str(paths.VOXTYPE_MODEL_DIR), quantization="int8"
+                "nemo-parakeet-tdt-0.6b-v3", str(paths.VOXTYPE_MODEL_DIR), quantization="int8", sess_options=opts
             ).with_timestamps()
         return _model
 
