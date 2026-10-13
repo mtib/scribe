@@ -18,6 +18,10 @@ _Screenshots show the Vantablack theme; the app follows whichever Omarchy theme 
   into the saved `.opus`. Speech into the mic *while the system plays* is therefore not in the saved audio,
   but it is still transcribed: each track is transcribed on its own (Parakeet drops one voice when two
   overlap in one stream). The raw tracks are kept in `.tracks.opus`.
+- **Transcribes while you record**: a background worker (`scribe.live`) recognizes each stretch of speech once a
+  pause follows it, so little is left to do after Stop. System and mic-only audio is covered completely; the mic of a
+  "both" recording is transcribed live only while the system track is quiet, because it still has to go through the
+  echo canceller, which needs the whole recording. Whatever was not covered is transcribed after Stop.
 - Name a recording before, during or after; unnamed ones show the start of the transcript.
 - Follows the active Omarchy theme (`~/.local/state/omarchy/current/theme/colors.toml`).
 
@@ -28,7 +32,7 @@ _Screenshots show the Vantablack theme; the app follows whichever Omarchy theme 
     .venv/bin/python -m scribe        # or ./scribe.sh
 
 Recordings live in `~/Recordings/Scribe/` (`<id>.opus`, `<id>.tracks.opus` for
-both-source recordings, `<id>.json` with the transcript). Diarization models
+both-source recordings, `<id>.json` with the transcript, `<id>.live.jsonl` with the words recognized while recording). Diarization models
 (~35 MB: pyannote segmentation + CAM++ speaker embedding) are downloaded once to `~/.local/share/scribe/models/` on first
 transcription; this is the only network access.
 

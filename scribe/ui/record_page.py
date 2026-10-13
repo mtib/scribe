@@ -2,8 +2,8 @@ import gi
 gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk
 
-from .. import library
-from ..jobs import encode_recording
+from .. import asr, library
+from ..jobs import LiveJob, encode_recording
 from ..recorder import Monitor, Recorder
 from .util import GAP, make_header, run_bg
 
@@ -15,6 +15,7 @@ class RecordPage(Adw.NavigationPage):
         super().__init__(title="new recording", tag="record")
         self.win = win
         self.rec = None
+        self.live = None
         self.monitor = Monitor()
         self.shown_levels = {}
 
@@ -90,6 +91,11 @@ class RecordPage(Adw.NavigationPage):
             self._monitor_on()
             return
         self.rec = rec
+        try:  # transcribe while recording; without the model it all happens after Stop
+            asr.check_model()
+            self.live = LiveJob(rec.dir, self.sources)
+        except Exception:
+            self.live = None
         self.action.set_label("stop")
         self.set_can_pop(False)
         self.back_btn.set_sensitive(False)
@@ -114,7 +120,11 @@ class RecordPage(Adw.NavigationPage):
         title = self.name.get_text().strip()
         rec_id = self.rec_id
 
+        live, self.live = self.live, None
+
         def work():
+            if live:
+                live.stop()
             dur, wavs = rec.stop()
             if not wavs:
                 raise RuntimeError("nothing was captured")

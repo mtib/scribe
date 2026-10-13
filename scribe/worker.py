@@ -2,6 +2,7 @@
 
   python -m scribe.worker <recordings dir> <recording id> [speakers]   transcribe
   python -m scribe.worker encode <tmp dir> <id> <title> <seconds> <sources,csv>   mix + encode a recording
+  python -m scribe.worker live <tmp dir> <sources,csv>   transcribe a recording in progress (until killed)
 
 Transcription progress goes to stdout as JSON lines: {"f": 0..1, "l": "label"}."""
 import json
@@ -13,20 +14,31 @@ def encode_main(argv):
     """Mix the temp WAVs of a finished recording into its .opus (echo cancelled) and register it."""
     import shutil
 
-    from . import encoder, library, paths
+    from . import encoder, library, live, paths
 
     tmp, rec_id, title, seconds, sources = Path(argv[2]), argv[3], argv[4], float(argv[5]), argv[6].split(",")
     wavs = {s: tmp / f"{s}.wav" for s in sources}
     paths.RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
     encoder.encode(wavs.get("mic"), wavs.get("system"), paths.RECORDINGS_DIR / f"{rec_id}.opus")
+    if (tmp / live.FILE).exists():
+        shutil.copy(tmp / live.FILE, paths.RECORDINGS_DIR / f"{rec_id}.live.jsonl")
     library.create(rec_id, sources, seconds, title=title)
     shutil.rmtree(tmp, ignore_errors=True)
+    return 0
+
+
+def live_main(argv):
+    from . import live
+
+    live.LiveTranscriber(argv[2], argv[3].split(",")).run()
     return 0
 
 
 def main(argv):
     if len(argv) > 1 and argv[1] == "encode":
         return encode_main(argv)
+    if len(argv) > 1 and argv[1] == "live":
+        return live_main(argv)
     directory, rec_id = Path(argv[1]), argv[2]
     speakers = int(argv[3]) if len(argv) > 3 and argv[3] else None
     from . import library, transcribe

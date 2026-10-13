@@ -5,21 +5,24 @@ track is transcribed on its own (Parakeet drops one voice when two overlap in on
 stream). Speakers come only from diarization on the mix - the mic is never assumed
 to be a particular person, because several people can share it.
 """
-from . import aec, asr, audio, diarize, merge
+from . import aec, asr, audio, diarize, live, merge
 
 
 def _words(rec, p):
-    """(words, mix_audio) for a recording; p(fraction, label) reports progress."""
+    """(words, mix_audio) for a recording; p(fraction, label) reports progress.
+    Stretches already transcribed while recording (live.py) are reused, not recognized again."""
+    done = live.load(rec.live)
     mix = audio.decode(rec.audio)
     if not rec.tracks.exists():
-        return asr.transcribe(mix, lambda f: p(f * 0.5, "transcribing")), mix
+        src = rec.meta.get("sources") or ["mic"]
+        return asr.transcribe(mix, lambda f: p(f * 0.5, "transcribing"), done=done.get(src[0], ())), mix
     mic = audio.decode(rec.tracks, channel=0)
     system = audio.decode(rec.tracks, channel=1)
     raw = mic
     mic = aec.cancel_echo(raw, system, audio.SR)
-    mic_words = asr.transcribe(mic, lambda f: p(f * 0.25, "transcribing mic"))
+    mic_words = asr.transcribe(mic, lambda f: p(f * 0.25, "transcribing mic"), done=done.get("mic", ()))
     mic_words = aec.drop_echo_residue(mic_words, mic, raw, system, audio.SR)
-    sys_words = asr.transcribe(system, lambda f: p(0.25 + f * 0.25, "transcribing system"))
+    sys_words = asr.transcribe(system, lambda f: p(0.25 + f * 0.25, "transcribing system"), done=done.get("system", ()))
     words = merge.drop_bleed_duplicates(mic_words, sys_words) + sys_words
     return sorted(words, key=lambda w: w["s"]), mix
 

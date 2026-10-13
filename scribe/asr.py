@@ -85,11 +85,30 @@ def _recognize(model, chunk):
     return []
 
 
-def transcribe(audio, progress=None, model=None):
-    """Return words [{s,e,t}] with absolute timestamps for 16 kHz mono float32 audio."""
-    model = model or load_model()
-    chunks = speech_chunks(audio)
-    words = []
+MIN_GAP = 0.5  # seconds: uncovered stretches shorter than this are not worth transcribing
+
+
+def _gaps(n, done):
+    """Sample ranges of [0, n) not covered by the (start, end, words) spans in `done`."""
+    gaps, pos = [], 0
+    for a, b, _ in sorted(done, key=lambda d: d[0]):
+        if a - pos >= MIN_GAP * SR:
+            gaps.append((pos, a))
+        pos = max(pos, b)
+    if n - pos >= MIN_GAP * SR:
+        gaps.append((pos, n))
+    return gaps
+
+
+def transcribe(audio, progress=None, model=None, done=()):
+    """Return words [{s,e,t}] with absolute timestamps for 16 kHz mono float32 audio.
+
+    `done` are spans (start sample, end sample, words) already transcribed while recording
+    (live.py); only the audio they don't cover is recognized now."""
+    words = [dict(w) for _, _, ws in done for w in ws]
+    chunks = [(g0 + a, g0 + b) for g0, g1 in _gaps(len(audio), done) for a, b in speech_chunks(audio[g0:g1])]
+    if chunks:
+        model = model or load_model()
     for i, (a, b) in enumerate(chunks):
         for w in _recognize(model, audio[a:b]):
             w["s"] = max(0.0, w["s"] + a / SR)
@@ -97,4 +116,7 @@ def transcribe(audio, progress=None, model=None):
             words.append(w)
         if progress:
             progress((i + 1) / len(chunks))
+    if progress and not chunks:
+        progress(1.0)
+    words.sort(key=lambda w: w["s"])
     return words

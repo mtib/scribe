@@ -35,19 +35,30 @@ def split_points(audio, sr=SR, target=60.0, search=5.0, frame=0.1):
     return cuts
 
 
+def frame_db(audio, sr=SR, frame=0.05):
+    """RMS level in dB of every whole `frame`-second frame."""
+    hop = int(frame * sr)
+    k = len(audio) // hop
+    rms = np.sqrt(np.square(audio[: k * hop]).reshape(k, hop).mean(axis=1) + 1e-12)
+    return 20 * np.log10(rms)
+
+
+def noise_threshold(db):
+    """Speech threshold adapted to the noise floor: 10th percentile + 12 dB, clamped to -65..-35 dB."""
+    return max(-65.0, min(-35.0, float(np.percentile(db, 10)) + 12.0))
+
+
 def activity_intervals(audio, sr=SR, frame=0.05, thresh_db=None, min_gap=0.3, min_len=0.2):
     """(start, end) seconds of speech-level energy; gaps shorter than min_gap are bridged.
 
     thresh_db=None adapts to the noise floor (10th percentile + 12 dB, clamped to -65..-35 dB).
     """
-    hop = int(frame * sr)
-    k = len(audio) // hop
+    k = len(audio) // int(frame * sr)
     if k == 0:
         return []
-    rms = np.sqrt(np.square(audio[: k * hop]).reshape(k, hop).mean(axis=1) + 1e-12)
-    db = 20 * np.log10(rms)
+    db = frame_db(audio, sr, frame)
     if thresh_db is None:
-        thresh_db = max(-65.0, min(-35.0, float(np.percentile(db, 10)) + 12.0))
+        thresh_db = noise_threshold(db)
     active = db > thresh_db
     out, start = [], None
     for i, a in enumerate(active):
@@ -67,7 +78,7 @@ def activity_intervals(audio, sr=SR, frame=0.05, thresh_db=None, min_gap=0.3, mi
     return [(a, b) for a, b in merged if b - a >= min_len]
 
 
-def speech_chunks(audio, sr=SR, pad=0.3, min_gap=0.7, max_len=45.0):
+def speech_chunks(audio, sr=SR, pad=0.3, min_gap=0.7, max_len=45.0, thresh_db=None):
     """(start, end) sample ranges to transcribe: each speech stretch plus `pad` seconds,
     silence skipped. Parakeet stops decoding after a long pause when given one big window,
     and emits stray words stamped at the end frame when fed trailing silence, so every
@@ -76,7 +87,7 @@ def speech_chunks(audio, sr=SR, pad=0.3, min_gap=0.7, max_len=45.0):
     finds speech in (very noisy) is returned whole."""
     if float(np.abs(audio).max(initial=0.0)) < 1e-4:
         return []
-    ivs = activity_intervals(audio, sr, min_gap=min_gap)
+    ivs = activity_intervals(audio, sr, thresh_db=thresh_db, min_gap=min_gap)
     if not ivs:
         ivs = [(0.0, len(audio) / sr)]
     out = []

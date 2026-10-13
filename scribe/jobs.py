@@ -105,3 +105,20 @@ def encode_recording(tmp_dir, rec_id, title, seconds, sources):
     if r.returncode != 0:
         raise RuntimeError("saving failed: " + (r.stderr.strip().splitlines() or ["worker exited"])[-1])
     return library.load(paths.RECORDINGS_DIR, rec_id)
+
+
+class LiveJob:
+    """The worker that transcribes a recording while it is made (see live.py)."""
+
+    def __init__(self, tmp_dir, sources):
+        cmd = [sys.executable, "-m", "scribe.worker", "live", str(tmp_dir), ",".join(sources)]
+        self.proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=_child_setup)
+
+    def stop(self):
+        """Stop at once; what it has appended so far stays valid."""
+        self.proc.terminate()
+        try:
+            self.proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            self.proc.wait()

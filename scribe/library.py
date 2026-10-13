@@ -19,6 +19,8 @@ class Recording:
     @property
     def tracks(self): return self.dir / f"{self.id}.tracks.opus"
     @property
+    def live(self): return self.dir / f"{self.id}.live.jsonl"
+    @property
     def json_path(self): return self.dir / f"{self.id}.json"
     @property
     def title(self): return (self.meta.get("title") or "").strip()
@@ -103,5 +105,5 @@ def load_all(directory=None):
 
 def delete(rec):
     _cache.pop(rec.json_path, None)
-    for p in (rec.audio, rec.tracks, rec.json_path):
+    for p in (rec.audio, rec.tracks, rec.live, rec.json_path):
         p.unlink(missing_ok=True)
