@@ -30,18 +30,6 @@ def test_pipeline(tmp_path):
     assert m["status"] == "transcribed" and m["segments"] and m["words"][0]["s"] >= 0
     assert "lamps" in " ".join(w["t"] for w in m["words"]).lower() or "child" in " ".join(w["t"] for w in m["words"]).lower()
     assert seen and seen[-1][0] <= 1.0
-    assert not asr._models  # the ~1 GB model is released before speaker identification
+    assert asr._model is None  # the ~1 GB model is released before speaker identification
     assert all(n.startswith("Speaker") for n in m["speakers"].values())  # never auto-"You"
     print(m["speakers"], [(s["spk"], s["text"][:40]) for s in m["segments"]])
-
-
-@pytest.mark.skipif(not asr.en_model_present(), reason="English model not downloaded")
-def test_english_model_gives_timed_words():
-    from scribe import audio
-
-    words = asr.transcribe(audio.decode(MIC), language="en")
-    asr.unload_model()
-    text = " ".join(w["t"] for w in words).lower()
-    assert "lamps" in text or "child" in text
-    assert all(0 <= w["s"] <= w["e"] for w in words)
-    assert [w["s"] for w in words] == sorted(w["s"] for w in words)

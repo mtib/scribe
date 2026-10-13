@@ -122,17 +122,3 @@ def test_diarization_step_is_fine_for_short_and_coarse_for_long_recordings():
     assert diarize.shift_ratio(120) == diarize.SHIFT_SHORT
     assert diarize.SHIFT_SHORT < diarize.shift_ratio(200) < diarize.SHIFT_LONG
     assert diarize.shift_ratio(5400) == diarize.SHIFT_LONG
-
-
-def test_settings_roundtrip_and_language_default(tmp_path, monkeypatch):
-    monkeypatch.setattr(settings.paths, "DATA_DIR", tmp_path / "data")
-    assert settings.get("language", asr.DEFAULT_LANGUAGE) == "multi"
-    settings.put("language", "en")
-    assert settings.get("language") == "en"
-    (tmp_path / "data" / "settings.json").write_text("{broken")
-    assert settings.get("language", "multi") == "multi"
-
-
-def test_english_model_never_blocks_a_job():
-    asr.check_model("en")  # downloaded on demand, so never "missing"
-    assert set(asr.LANGUAGES) == set(asr.MODEL_NAMES)

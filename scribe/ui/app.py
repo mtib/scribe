@@ -52,7 +52,7 @@ class Window(Adw.ApplicationWindow):
         self.open_transcript(rec)
         try:
             from .. import asr
-            asr.check_model(rec.meta.get("language") or asr.DEFAULT_LANGUAGE)
+            asr.check_model()
             self.jobs.start(rec)
         except Exception:
             pass  # library banner explains; the page offers a manual transcribe button
